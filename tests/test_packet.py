@@ -25,9 +25,10 @@ class TestUtility:
 class TestPacketConstruction:
     klass = packet.Packet
 
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def _setup(self, simple_dictionary):
         self.path = os.path.join(TEST_ROOT_PATH, "data")
-        self.dict = Dictionary(os.path.join(self.path, "simple"))
+        self.dict = simple_dictionary
 
     def testBasicConstructor(self):
         pkt = self.klass()
@@ -74,9 +75,10 @@ class TestPacketConstruction:
 
 
 class TestPacket:
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def _setup(self, full_dictionary):
         self.path = os.path.join(TEST_ROOT_PATH, "data")
-        self.dict = Dictionary(os.path.join(self.path, "full"))
+        self.dict = full_dictionary
         self.packet = packet.Packet(
             id=0, secret=b"secret", authenticator=b"01234567890ABCDEF", dict=self.dict
         )
@@ -561,9 +563,10 @@ class TestAuthPacketConstruction(TestPacketConstruction):
 
 
 class TestStatusPacket:
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def _setup(self, full_dictionary):
         self.path = os.path.join(TEST_ROOT_PATH, "data")
-        self.dict = Dictionary(os.path.join(self.path, "full"))
+        self.dict = full_dictionary
         self.packet = packet.StatusPacket(
             id=1,
             secret=b"secret",
@@ -605,9 +608,10 @@ class TestStatusPacket:
 
 
 class TestAuthPacket:
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def _setup(self, full_dictionary):
         self.path = os.path.join(TEST_ROOT_PATH, "data")
-        self.dict = Dictionary(os.path.join(self.path, "full"))
+        self.dict = full_dictionary
         self.packet = packet.AuthPacket(
             id=0, secret=b"secret", authenticator=b"01234567890ABCDEF", dict=self.dict
         )
@@ -658,9 +662,10 @@ class TestAuthPacket:
 
 
 class TestAuthPacketChap:
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def _setup(self, chap_dictionary):
         self.path = os.path.join(TEST_ROOT_PATH, "data")
-        self.dict = Dictionary(os.path.join(self.path, "chap"))
+        self.dict = chap_dictionary
         # self.packet = packet.Packet(id=0, secret=b'secret',
         #                             dict=self.dict)
         self.client = Client(server="localhost", secret=b"secret", dict=self.dict)
@@ -700,9 +705,10 @@ class TestAcctPacketConstruction(TestPacketConstruction):
 
 
 class TestAcctPacket:
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def _setup(self, full_dictionary):
         self.path = os.path.join(TEST_ROOT_PATH, "data")
-        self.dict = self.loadDict()
+        self.dict = full_dictionary
         self.packet = packet.AcctPacket(
             id=0, secret=b"secret", authenticator=b"01234567890ABCDEF", dict=self.dict
         )
@@ -1210,9 +1216,10 @@ class TestBlastRadiusHardening:
         packets whose Authenticator is all-zero.
     """
 
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def _setup(self, full_dictionary):
         self.path = os.path.join(TEST_ROOT_PATH, "data")
-        self.dict = Dictionary(os.path.join(self.path, "full"))
+        self.dict = full_dictionary
 
     def test_verify_paths_use_constant_time_compare(self):
         import pyrad2.packet as packet_mod

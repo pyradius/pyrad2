@@ -1,4 +1,3 @@
-import os
 import select
 import socket
 
@@ -6,11 +5,9 @@ import pytest
 
 from pyrad2 import packet
 from pyrad2.constants import PacketType
-from pyrad2.dictionary import Dictionary
 from pyrad2.packet import PacketError
 from pyrad2.server import RemoteHost, Server, ServerPacketError
 
-from .base import TEST_ROOT_PATH
 from .mock import (
     MockClassMethod,
     MockFd,
@@ -222,8 +219,9 @@ class TestAuthPacketHandling:
 
 
 class TestMessageAuthenticatorPolicy:
-    def setup_method(self):
-        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
+    @pytest.fixture(autouse=True)
+    def _setup(self, full_dictionary):
+        self.dictionary = full_dictionary
         self.remote_host = RemoteHost("host", b"secret", "host")
 
     def _server(self, **kwargs):

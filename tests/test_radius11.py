@@ -153,8 +153,9 @@ class TestTokenCounter:
 class TestPacketGating:
     """Direct tests that the radius_version flag swaps MD5 paths off."""
 
-    def setup_method(self):
-        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
+    @pytest.fixture(autouse=True)
+    def _inject_dictionary(self, full_dictionary):
+        self.dictionary = full_dictionary
 
     def _v11_auth_packet(self, **extra):
         token = TokenCounter().next()
@@ -281,11 +282,11 @@ class TestPacketGating:
         assert 80 not in parsed
         assert not parsed.has_message_authenticator()
 
-    def test_set_obfuscated_user_password_v1_1_emits_plaintext(self):
+    def test_set_obfuscated_user_password_v1_1_emits_plaintext(
+        self, radsec_dictionary
+    ):
         # Use the integration test dictionary which carries User-Password.
-        radsec_dict = Dictionary(
-            os.path.join(TEST_ROOT_PATH, "dicts/dictionary")
-        )
+        radsec_dict = radsec_dictionary
         token = TokenCounter().next()
         pkt = AuthPacket(
             id=0,
@@ -301,10 +302,10 @@ class TestPacketGating:
         )
         assert parsed["User-Password"] == ["hunter2"]
 
-    def test_set_obfuscated_user_password_v1_0_applies_pw_crypt(self):
-        radsec_dict = Dictionary(
-            os.path.join(TEST_ROOT_PATH, "dicts/dictionary")
-        )
+    def test_set_obfuscated_user_password_v1_0_applies_pw_crypt(
+        self, radsec_dictionary
+    ):
+        radsec_dict = radsec_dictionary
         pkt = AuthPacket(
             id=1,
             secret=b"radsec",
@@ -348,12 +349,12 @@ class TestPacketGating:
         parsed = parse_packet(raw, b"radsec", self.dictionary)
         assert parsed["Test-Encrypted-String"] == ["secret-value"]
 
-    def test_serialization_does_not_mutate_packet_dict(self):
+    def test_serialization_does_not_mutate_packet_dict(self, radsec_dictionary):
         """Regression for P3: ``_pkt_encode_attributes`` used to delete
         and re-add deferred attribute codes on every serialization,
         leaving the packet in different shape after the call. The pure
         path must leave ``self`` untouched."""
-        radsec_dict = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
+        radsec_dict = radsec_dictionary
         pkt = AuthPacket(
             id=1,
             secret=b"radsec",
@@ -393,13 +394,13 @@ class TestPacketGating:
         # v1.1 path.
         assert pkt.authenticator is None
 
-    def test_set_obfuscated_re_encodes_when_version_flips(self):
+    def test_set_obfuscated_re_encodes_when_version_flips(self, radsec_dictionary):
         """RFC 9765 §3.5: a TLS resumption might land on a different ALPN
         than the original session. The plaintext sidecar must remain
         authoritative so a re-serialization picks up the new version
         rather than replaying the v1.0 ciphertext under v1.1 semantics
         (or vice versa)."""
-        radsec_dict = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
+        radsec_dict = radsec_dictionary
         pkt = AuthPacket(
             id=1,
             secret=b"radsec",
@@ -708,8 +709,9 @@ class TestDeferredObfuscatedContainer:
 class TestStampRadiusVersion:
     """Tests for RadSecClient._stamp_radius_version without a TLS handshake."""
 
-    def setup_method(self):
-        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
+    @pytest.fixture(autouse=True)
+    def _setup(self, radsec_dictionary):
+        self.dictionary = radsec_dictionary
         self.client = RadSecClient(
             server="127.0.0.1",
             secret=b"radsec",
@@ -769,8 +771,9 @@ class TestV11StatusServerVerifier:
     Status-Server verifier must NOT fall back to a Message-Authenticator
     check or it would reject valid v1.1 health packets."""
 
-    def setup_method(self):
-        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
+    @pytest.fixture(autouse=True)
+    def _inject_dictionary(self, radsec_dictionary):
+        self.dictionary = radsec_dictionary
 
     def test_v1_1_status_request_verifies_without_message_authenticator(self):
         token = TokenCounter().next()
@@ -832,8 +835,9 @@ class TestV11StatusServerVerifier:
 class TestV11Chap:
     """RFC 9765 §5.1.2: CHAP-Password requires explicit CHAP-Challenge."""
 
-    def setup_method(self):
-        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
+    @pytest.fixture(autouse=True)
+    def _inject_dictionary(self, radsec_dictionary):
+        self.dictionary = radsec_dictionary
 
     def test_v1_1_chap_without_challenge_raises(self):
         from pyrad2.exceptions import PacketError as PErr
@@ -852,8 +856,9 @@ class TestV11Chap:
 class TestRadSecAlpnConfiguration:
     """RadSecServer / RadSecClient apply ALPN to their SSL context as configured."""
 
-    def setup_method(self):
-        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
+    @pytest.fixture(autouse=True)
+    def _inject_dictionary(self, radsec_dictionary):
+        self.dictionary = radsec_dictionary
 
     def test_server_default_v1_0_only(self):
         server = RadSecServer(
@@ -941,8 +946,9 @@ class _IntegrationServer(RadSecServer):
 class TestRadSecV11EndToEnd:
     """Full TLS handshake → ALPN negotiation → v1.1 packet round-trip."""
 
-    def setup_method(self):
-        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
+    @pytest.fixture(autouse=True)
+    def _setup(self, radsec_dictionary):
+        self.dictionary = radsec_dictionary
         self.port = _free_port()
         _IntegrationServer.captured = None
 

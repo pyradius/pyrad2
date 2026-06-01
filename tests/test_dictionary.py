@@ -224,7 +224,7 @@ class TestDictionaryParsing:
             2: "Test-Tlv-Int",
         }
 
-    def test_sub_tlv_parsing(self):
+    def test_sub_tlv_parsing(self, full_dictionary):
         for attr, _, _ in self.simple_dict_values:
             if attr.startswith("Test-Tlv-"):
                 assert self.dict[attr].is_sub_attribute is True
@@ -234,7 +234,7 @@ class TestDictionaryParsing:
                 assert self.dict[attr].parent is None
 
         # tlv with vendor
-        full_dict = Dictionary(os.path.join(self.path, "full"))
+        full_dict = full_dictionary
         assert full_dict["Simplon-Tlv-Str"].is_sub_attribute is True
         assert full_dict["Simplon-Tlv-Str"].parent == full_dict["Simplon-Tlv"]
         assert full_dict["Simplon-Tlv-Int"].is_sub_attribute is True
@@ -447,11 +447,10 @@ class TestIncludeSandboxing:
                 include_base_dir=TEST_ROOT_PATH,
             )
 
-    def test_legitimate_relative_include_still_works(self):
+    def test_legitimate_relative_include_still_works(self, radsec_dictionary):
         # Sanity: the canonical FreeRADIUS-style sibling include still
         # resolves under the trusted base.
-        d = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
-        assert len(d) > 0
+        assert len(radsec_dictionary) > 0
 
 
 class TestVendorIdRange:

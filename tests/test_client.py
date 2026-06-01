@@ -1,4 +1,3 @@
-import os
 import select
 import socket
 
@@ -6,10 +5,8 @@ import pytest
 
 from pyrad2.client import Client, Timeout
 from pyrad2.constants import PacketType
-from pyrad2.dictionary import Dictionary
 from pyrad2.packet import AcctPacket, AuthPacket, CoAPacket, StatusPacket
 
-from .base import TEST_ROOT_PATH
 from .mock import MockPacket, MockPoll, MockSocket
 
 BIND_IP = "127.0.0.1"
@@ -208,9 +205,10 @@ class TestOther:
         assert packet.id == 15
         assert packet.secret == b"zeer geheim"
 
-    def test_prepare_outgoing_auth_packet_adds_ma_for_eap_message(self):
-        dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
-        client = Client(self.server, secret=b"secret", dict=dictionary)
+    def test_prepare_outgoing_auth_packet_adds_ma_for_eap_message(
+        self, full_dictionary
+    ):
+        client = Client(self.server, secret=b"secret", dict=full_dictionary)
         packet = client.create_auth_packet(id=15)
         packet[79] = [b"\x02\x01\x00\x05\x01"]
 
@@ -225,9 +223,8 @@ class TestOther:
         assert packet.id == 15
         assert packet.secret == b"zeer geheim"
 
-    def test_prepare_outgoing_status_packet_adds_ma(self):
-        dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
-        client = Client(self.server, secret=b"secret", dict=dictionary)
+    def test_prepare_outgoing_status_packet_adds_ma(self, full_dictionary):
+        client = Client(self.server, secret=b"secret", dict=full_dictionary)
         packet = client.create_status_packet(id=15)
 
         client._prepare_outgoing_packet(packet)

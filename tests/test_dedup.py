@@ -1,15 +1,13 @@
-import os
 from unittest.mock import MagicMock
 
 import pytest
 
 from pyrad2 import dedup, packet
 from pyrad2.constants import PacketType
-from pyrad2.dictionary import Dictionary
 from pyrad2.server import RemoteHost, Server
 from pyrad2.server_async import DatagramProtocolServer, ServerType
 
-from .base import DummyServer, TEST_ROOT_PATH
+from .base import DummyServer
 
 
 def _make_auth_packet(dictionary, *, ident=1, authenticator=b"0123456789ABCDEF"):
@@ -26,8 +24,9 @@ def _make_auth_packet(dictionary, *, ident=1, authenticator=b"0123456789ABCDEF")
 
 
 class TestDedupKey:
-    def setup_method(self):
-        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
+    @pytest.fixture(autouse=True)
+    def _inject_dictionary(self, full_dictionary):
+        self.dictionary = full_dictionary
 
     def test_key_for_real_request(self):
         pkt = _make_auth_packet(self.dictionary)
@@ -156,8 +155,9 @@ class _CountingServer(Server):
 
 
 class TestSyncServerDedup:
-    def setup_method(self):
-        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
+    @pytest.fixture(autouse=True)
+    def _inject_dictionary(self, full_dictionary):
+        self.dictionary = full_dictionary
         self.remote_host = RemoteHost("10.0.0.1", b"secret", "host")
 
     def _server(self, **kwargs):
@@ -229,8 +229,9 @@ class TestSyncServerDedup:
 
 
 class TestAsyncServerDedup:
-    def setup_method(self):
-        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
+    @pytest.fixture(autouse=True)
+    def _inject_dictionary(self, full_dictionary):
+        self.dictionary = full_dictionary
         self.remote_host = RemoteHost("10.0.0.1", b"secret", "host")
 
     def _protocol_for(self, server):

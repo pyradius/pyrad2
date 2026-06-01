@@ -1,16 +1,14 @@
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from pyrad2 import packet
 from pyrad2.constants import ErrorCause, PacketType
-from pyrad2.dictionary import Dictionary
 from pyrad2.exceptions import PacketError
 from pyrad2.server import RemoteHost
 from pyrad2.server_async import DatagramProtocolServer, ServerAsync, ServerType
 
-from .base import DummyServer, TEST_ROOT_PATH, capture_logs
+from .base import DummyServer, capture_logs
 
 
 class AuthAcctOnlyServer(ServerAsync):
@@ -65,14 +63,13 @@ class TestDatagramProtocolServer:
             b"response", ("127.0.0.1", 12345)
         )
 
-    def test_auth_status_server_replies_without_callback(self):
-        dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
-        self.server.dict = dictionary
+    def test_auth_status_server_replies_without_callback(self, full_dictionary):
+        self.server.dict = full_dictionary
         request = packet.StatusPacket(
             id=1,
             secret=b"secret",
             authenticator=b"0123456789ABCDEF",
-            dict=dictionary,
+            dict=full_dictionary,
         )
         self.protocol.connection_made(self.transport)
         self.protocol.request_callback = MagicMock()
@@ -87,8 +84,10 @@ class TestDatagramProtocolServer:
         assert reply.code == PacketType.AccessAccept
         assert request.verify_reply(reply, rawreply=rawreply)
 
-    def test_accounting_status_server_replies_with_accounting_response(self):
-        dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
+    def test_accounting_status_server_replies_with_accounting_response(
+        self, full_dictionary
+    ):
+        dictionary = full_dictionary
         server = DummyServer(dictionary=dictionary)
         remote_host = RemoteHost("127.0.0.1", b"secret", "name")
         protocol = DatagramProtocolServer(
@@ -149,8 +148,10 @@ class TestServerAsync:
         with pytest.raises(ValueError, match="Missing packet to reply to"):
             server.create_reply_packet()
 
-    def test_message_authenticator_policy_rejects_eap_without_ma(self):
-        dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
+    def test_message_authenticator_policy_rejects_eap_without_ma(
+        self, full_dictionary
+    ):
+        dictionary = full_dictionary
         # require_message_authenticator=False isolates the EAP-specific
         # policy gate (otherwise the general BlastRADIUS rule fires first).
         server = DummyServer(
@@ -170,8 +171,10 @@ class TestServerAsync:
         with pytest.raises(PacketError, match="EAP-Message requires"):
             server.validate_message_authenticator_policy(parsed)
 
-    def test_create_reply_packet_adds_ma_when_policy_requires_it(self):
-        dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
+    def test_create_reply_packet_adds_ma_when_policy_requires_it(
+        self, full_dictionary
+    ):
+        dictionary = full_dictionary
         server = DummyServer(
             dictionary=dictionary,
             require_message_authenticator=True,
@@ -216,7 +219,7 @@ class TestServerAsync:
 
         assert isinstance(server, ServerAsync)
 
-    def test_default_coa_handler_sends_nak(self):
+    def test_default_coa_handler_sends_nak(self, full_dictionary):
         server = AuthAcctOnlyServer()
         protocol = MagicMock()
         request = packet.CoAPacket(
@@ -224,7 +227,7 @@ class TestServerAsync:
             id=1,
             secret=b"secret",
             authenticator=b"0123456789ABCDEF",
-            dict=Dictionary(os.path.join(TEST_ROOT_PATH, "data/full")),
+            dict=full_dictionary,
         )
 
         server.handle_coa_packet(protocol, request, ("127.0.0.1", 12345))
@@ -233,7 +236,7 @@ class TestServerAsync:
         assert reply.code == PacketType.CoANAK
         assert int.from_bytes(reply[101][0], "big") == ErrorCause.UnsupportedExtension
 
-    def test_default_disconnect_handler_sends_nak(self):
+    def test_default_disconnect_handler_sends_nak(self, full_dictionary):
         server = AuthAcctOnlyServer()
         protocol = MagicMock()
         request = packet.CoAPacket(
@@ -241,7 +244,7 @@ class TestServerAsync:
             id=1,
             secret=b"secret",
             authenticator=b"0123456789ABCDEF",
-            dict=Dictionary(os.path.join(TEST_ROOT_PATH, "data/full")),
+            dict=full_dictionary,
         )
 
         server.handle_disconnect_packet(protocol, request, ("127.0.0.1", 12345))
