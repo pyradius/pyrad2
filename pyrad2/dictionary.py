@@ -164,12 +164,23 @@ class Dictionary:
             explicit ``format=`` declaration default to ``(1, 1)``.
     """
 
-    def __init__(self, dict: Optional[str] = None, *dicts):
+    def __init__(
+        self,
+        dict: Optional[str] = None,
+        *dicts,
+        include_base_dir: Optional[str] = None,
+    ):
         """Initialize a new Dictionary instance and load specified dictionary files.
 
         Args:
             dict (str): Path of dictionary file or file-like object to read
             dicts (list): Sequence of strings or files
+            include_base_dir (str): Trusted base directory for
+                ``$INCLUDE`` resolution. Nested includes whose resolved
+                path escapes this directory raise ``ParseError``.
+                Defaults to the directory of each entry-point file.
+                Set this explicitly when loading dictionaries from
+                untrusted sources.
         """
         self.vendors = bidict.BiDict()
         self.vendors.add("", 0)
@@ -177,6 +188,7 @@ class Dictionary:
         self.attributes: Dict[Hashable, Any] = {}
         self.vendor_formats: Dict[int, tuple[int, int]] = {}
         self.defer_parse: list[tuple[Dict, list]] = []
+        self._include_base_dir = include_base_dir
 
         if dict:
             self.read_dictionary(dict)
@@ -211,7 +223,7 @@ class Dictionary:
         if len(tokens) not in [4, 5]:
             raise ParseError(
                 "Incorrect number of tokens for attribute definition",
-                name=state["file"],
+                file=state["file"],
                 line=state["line"],
             )
 
@@ -401,7 +413,23 @@ class Dictionary:
                 )
 
         (vendorname, vendor) = tokens[1:3]
-        vendor_id = int(vendor, 0)
+        try:
+            vendor_id = int(vendor, 0)
+        except ValueError:
+            raise ParseError(
+                "Invalid vendor id %r (expected an integer literal)" % (vendor,),
+                file=state["file"],
+                line=state["line"],
+            )
+        # RFC 2865 §5.26: the SMI Network Management Private Enterprise
+        # Code is an unsigned 24-bit value. Anything outside that range
+        # would silently corrupt the VSA encoder.
+        if not 0 <= vendor_id <= 0xFFFFFF:
+            raise ParseError(
+                "Vendor id %d out of range (expected 0..0xFFFFFF)" % vendor_id,
+                file=state["file"],
+                line=state["line"],
+            )
         self.vendors.add(vendorname, vendor_id)
         if vsa_format != VENDOR_FORMAT_DEFAULT:
             self.vendor_formats[vendor_id] = vsa_format
@@ -486,7 +514,7 @@ class Dictionary:
             file (str | io): Name of dictionary file to parse or a file-like object
         """
 
-        fil = dictfile.DictFile(file)
+        fil = dictfile.DictFile(file, include_base_dir=self._include_base_dir)
 
         state: Dict[str, Any] = {}
         state["vendor"] = ""

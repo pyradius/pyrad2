@@ -27,29 +27,34 @@ class PacketError(RadiusException):
 
 
 class ParseError(RadiusException):
-    """Exception raised for errors
-    while parsing RADIUS dictionary files.
+    """Exception raised for errors while parsing RADIUS dictionary files.
 
     Attributes:
-        msg (str): Error message
-        linenumber (int): Line number on which the error occurred
+        msg (str): Error message.
+        file (str): Dictionary file the error originated in, if known.
+        line (int): Line number, or ``-1`` if not known.
     """
 
-    def __init__(self, msg=None, **data):
+    def __init__(
+        self,
+        msg: str | None = None,
+        *,
+        file: str = "",
+        line: int = -1,
+    ) -> None:
         self.msg = msg
-        self.file = data.get("file", "")
-        self.line = data.get("line", -1)
+        self.file = file
+        self.line = line
 
-    def __str__(self):
-        str = ""
+    def __str__(self) -> str:
+        out = ""
         if self.file:
-            str += self.file
+            out += self.file
         if self.line > -1:
-            str += "(%d)" % self.line
+            out += "(%d)" % self.line
         if self.file or self.line > -1:
-            str += ": "
-        str += "Parse error"
+            out += ": "
+        out += "Parse error"
         if self.msg:
-            str += ": %s" % self.msg
-
-        return str
+            out += ": %s" % self.msg
+        return out

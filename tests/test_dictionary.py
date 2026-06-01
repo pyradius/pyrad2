@@ -478,3 +478,92 @@ class DictionaryParsingTests(unittest.TestCase):
             self.assertEqual("dictfiletest" in str(e), True)
         else:
             self.fail()
+
+
+class IncludeSandboxingTests(unittest.TestCase):
+    """Regression coverage for the $INCLUDE path-traversal hardening."""
+
+    def test_absolute_include_outside_base_is_rejected(self):
+        # $INCLUDE /etc/passwd from an untrusted dictionary used to read
+        # whatever the process had access to. Now it must be rejected.
+        with self.assertRaisesRegex(ParseError, "escapes the dictionary base"):
+            Dictionary(
+                StringIO("$INCLUDE /etc/passwd\n"),
+                include_base_dir=TEST_ROOT_PATH,
+            )
+
+    def test_relative_traversal_is_rejected(self):
+        # ../ traversal also escapes the trusted base.
+        with self.assertRaisesRegex(ParseError, "escapes the dictionary base"):
+            Dictionary(
+                StringIO("$INCLUDE ../../../etc/passwd\n"),
+                include_base_dir=TEST_ROOT_PATH,
+            )
+
+    def test_legitimate_relative_include_still_works(self):
+        # Sanity: the canonical FreeRADIUS-style sibling include still
+        # resolves under the trusted base.
+        d = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
+        self.assertTrue(len(d) > 0)
+
+
+class VendorIdRangeTests(unittest.TestCase):
+    """Regression coverage for the vendor-id range check."""
+
+    def test_negative_vendor_id_is_rejected(self):
+        with self.assertRaisesRegex(ParseError, "out of range"):
+            Dictionary(StringIO("VENDOR Bogus -1\n"))
+
+    def test_overflow_vendor_id_is_rejected(self):
+        # 0x1000000 is one past the 24-bit ceiling.
+        with self.assertRaisesRegex(ParseError, "out of range"):
+            Dictionary(StringIO("VENDOR Bogus 0x1000000\n"))
+
+    def test_non_integer_vendor_id_is_rejected(self):
+        with self.assertRaisesRegex(ParseError, "Invalid vendor id"):
+            Dictionary(StringIO("VENDOR Bogus notanumber\n"))
+
+    def test_valid_vendor_id_is_accepted(self):
+        d = Dictionary(StringIO("VENDOR Simplon 0xFFFFFF\n"))
+        self.assertEqual(d.vendors["Simplon"], 0xFFFFFF)
+
+
+class ParseErrorMetadataTests(unittest.TestCase):
+    """Regression coverage for the ParseError signature tightening (H12)."""
+
+    def test_filename_surfaces_in_error_message(self):
+        # Pre-fix this branch passed ``name=state["file"]`` to ParseError,
+        # which silently dropped it.
+        try:
+            Dictionary(
+                StringIO("ATTRIBUTE TooFew\n"),
+            )
+        except ParseError as exc:
+            self.assertEqual(exc.file, "")  # StringIO has no filename
+            self.assertIn("Incorrect number of tokens", exc.msg or "")
+        else:
+            self.fail("expected ParseError")
+
+    def test_filename_surfaces_for_file_input(self):
+        # The same error from a real file must carry the file name.
+        import tempfile
+
+        with tempfile.NamedTemporaryFile("w", suffix=".dict", delete=False) as f:
+            f.write("ATTRIBUTE TooFew\n")
+            fname = f.name
+        try:
+            try:
+                Dictionary(fname)
+            except ParseError as exc:
+                self.assertEqual(os.path.basename(fname), exc.file)
+                self.assertIn(os.path.basename(fname), str(exc))
+            else:
+                self.fail("expected ParseError")
+        finally:
+            os.unlink(fname)
+
+    def test_unknown_kwargs_are_rejected(self):
+        # The old **data signature silently swallowed name=. The tightened
+        # signature must reject it so future drift is impossible.
+        with self.assertRaises(TypeError):
+            ParseError("oops", name="ignored")  # type: ignore[call-arg]

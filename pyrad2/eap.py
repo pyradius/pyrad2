@@ -13,6 +13,7 @@ import struct
 
 from pyrad2 import packet
 from pyrad2.constants import EAPPacketType, EAPType
+from pyrad2.exceptions import PacketError
 
 # RFC 2865 attribute codes used by the EAP-MD5 flow.
 EAP_MESSAGE_ATTR = 79
@@ -63,10 +64,18 @@ def build_eap_md5_challenge(eap_id: int, password: bytes, eap_md5: bytes) -> byt
 
 
 def password_from_packet(pkt) -> bytes:
-    """Extract the user password from an AuthPacket for EAP framing."""
-    if USER_PASSWORD_ATTR in pkt:
-        return pkt[USER_PASSWORD_ATTR][0]
-    return pkt[USER_NAME_ATTR][0]
+    """Extract the user password from an AuthPacket for EAP framing.
+
+    Raises ``PacketError`` if no ``User-Password`` is present. The
+    legacy fall-back to ``User-Name`` silently mis-keyed the EAP-MD5
+    challenge with the username, downgrading authentication to a value
+    that anyone observing the request could reproduce.
+    """
+    if USER_PASSWORD_ATTR not in pkt:
+        raise PacketError(
+            "EAP framing requires a User-Password attribute on the packet"
+        )
+    return pkt[USER_PASSWORD_ATTR][0]
 
 
 def inject_eap_identity(pkt) -> None:

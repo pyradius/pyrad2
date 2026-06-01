@@ -64,12 +64,20 @@ class PasswordFromPacketTests(unittest.TestCase):
         pkt = {eap.USER_PASSWORD_ATTR: [b"pw"], eap.USER_NAME_ATTR: [b"alice"]}
         self.assertEqual(eap.password_from_packet(pkt), b"pw")
 
-    def test_falls_back_to_user_name(self):
+    def test_raises_when_user_password_is_missing(self):
+        # Historically this fell back to the User-Name attribute, which
+        # silently mis-keyed the EAP-MD5 challenge. The new contract
+        # requires User-Password explicitly.
+        from pyrad2.exceptions import PacketError
+
         pkt = {eap.USER_NAME_ATTR: [b"alice"]}
-        self.assertEqual(eap.password_from_packet(pkt), b"alice")
+        with self.assertRaisesRegex(PacketError, "User-Password"):
+            eap.password_from_packet(pkt)
 
     def test_raises_when_neither_attribute_is_present(self):
-        with self.assertRaises(KeyError):
+        from pyrad2.exceptions import PacketError
+
+        with self.assertRaisesRegex(PacketError, "User-Password"):
             eap.password_from_packet({})
 
 
