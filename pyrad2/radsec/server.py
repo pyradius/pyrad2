@@ -75,7 +75,7 @@ class RadSecServer:
         allowed_client_fingerprints: Optional[Iterable[str]] = None,
         connection_read_timeout: Optional[float] = None,
         max_packets_per_connection: Optional[int] = None,
-        require_message_authenticator: bool = False,
+        require_message_authenticator: bool = True,
         require_eap_message_authenticator: bool = True,
         enable_coa: bool = True,
         enable_disconnect: bool = True,
@@ -102,7 +102,9 @@ class RadSecServer:
             max_packets_per_connection (int): Optional packet limit before closing
                 an accepted TLS connection.
             require_message_authenticator (bool): Require Message-Authenticator
-                on incoming packets.
+                on incoming RADIUS/1.0 packets (default: True). Mitigates
+                BlastRADIUS (CVE-2024-3596). Has no effect on RADIUS/1.1
+                packets (RFC 9765 §5.2 forbids the attribute there).
             require_eap_message_authenticator (bool): Require
                 Message-Authenticator on packets containing EAP-Message.
             enable_coa (bool): Dispatch CoA-Request packets to `handle_coa`;

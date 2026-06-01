@@ -64,8 +64,9 @@ class Server(host.Host):
         auth_enabled: bool = True,
         acct_enabled: bool = True,
         coa_enabled: bool = False,
-        require_message_authenticator: bool = False,
+        require_message_authenticator: bool = True,
         require_eap_message_authenticator: bool = True,
+        enable_pkt_verify: bool = True,
         dedup_enabled: bool = True,
         dedup_ttl: float = 30.0,
         dedup_max_entries: int = 4096,
@@ -84,9 +85,15 @@ class Server(host.Host):
             acct_enabled (bool): Enable accounting server (default: True).
             coa_enabled (bool): Enable CoA server (default: False).
             require_message_authenticator (bool): Require
-                Message-Authenticator on incoming packets.
+                Message-Authenticator on incoming packets (default: True).
+                Mitigates BlastRADIUS (CVE-2024-3596). Disable only to
+                bridge legacy NASes that don't emit the attribute.
             require_eap_message_authenticator (bool): Require
                 Message-Authenticator on packets containing EAP-Message.
+            enable_pkt_verify (bool): Verify the Request Authenticator on
+                every received packet before dispatch (default: True).
+                Mirrors ``ServerAsync.enable_pkt_verify``. Disable only to
+                bridge legacy NASes that emit malformed authenticators.
             dedup_enabled (bool): Enable RFC 5080 duplicate detection and
                 response caching (default: True). Retransmissions of an
                 Access-Request, Accounting-Request, CoA-Request, or
@@ -109,6 +116,7 @@ class Server(host.Host):
         self.coafds: list = []
         self.require_message_authenticator = require_message_authenticator
         self.require_eap_message_authenticator = require_eap_message_authenticator
+        self.enable_pkt_verify = enable_pkt_verify
         if dedup_cache is not None:
             self._dedup_cache: Optional[dedup.ResponseCache] = dedup_cache
         elif dedup_enabled:
@@ -277,19 +285,48 @@ class Server(host.Host):
                 # No-op if the handler already recorded a reply.
                 self._dedup_cache.drop_in_flight(key)
 
-    def _add_secret(self, pkt: packet.Packet) -> None:
-        """Add secret to packets received and raise ServerPacketError
-        for unknown hosts.
+    def _lookup_secret(self, addr: str) -> bytes:
+        """Return the shared secret for ``addr`` or raise ``ServerPacketError``.
 
-        Args:
-            pkt (packet.Packet): Packet to process
+        Used at recvfrom time so unknown sources are dropped before any
+        attribute parsing runs, and so the packet is parsed with the
+        real secret (lets the authenticator MD5 check pass without a
+        second decode).
         """
-        if pkt.source[0] in self.hosts:
-            pkt.secret = self.hosts[pkt.source[0]].secret
-        elif "0.0.0.0" in self.hosts:
-            pkt.secret = self.hosts["0.0.0.0"].secret
-        else:
+        host = self.hosts.get(addr) or self.hosts.get("0.0.0.0")
+        if host is None:
             raise ServerPacketError("Received packet from unknown host")
+        return host.secret
+
+    def _add_secret(self, pkt: packet.Packet) -> None:
+        """Backwards-compatible shim: set ``pkt.secret`` from ``self.hosts``.
+
+        Kept for subclasses that override or call it directly. ``_grab_packet``
+        now seeds the secret during decode, so this is usually a no-op.
+        """
+        pkt.secret = self._lookup_secret(pkt.source[0])
+
+    def _verify_request_authenticator(self, pkt: packet.Packet) -> None:
+        """Run the per-code Request Authenticator check before dispatch.
+
+        Mirrors ``ServerAsync`` so the sync path doesn't pass un-verified
+        traffic to user handlers. Trivial-mock packets (no Packet base)
+        short-circuit so existing unit tests keep working.
+        """
+        if not self.enable_pkt_verify:
+            return
+        if not isinstance(pkt, packet.Packet):
+            return
+        if pkt.code == PacketType.AccessRequest:
+            if not isinstance(pkt, packet.AuthPacket) or not pkt.verify_auth_request():
+                raise packet.PacketError("Packet verification failed")
+        elif pkt.code in (
+            PacketType.AccountingRequest,
+            PacketType.CoARequest,
+            PacketType.DisconnectRequest,
+        ):
+            if not pkt.verify_packet():
+                raise packet.PacketError("Packet verification failed")
 
     def _handle_auth_packet(self, pkt: packet.Packet) -> None:
         """Process a packet received on the authentication port.
@@ -307,6 +344,7 @@ class Server(host.Host):
             raise ServerPacketError(
                 "Received non-authentication packet on authentication port"
             )
+        self._verify_request_authenticator(pkt)
         self._validate_message_authenticator_policy(pkt)
         self._dedup_dispatch(pkt, self.handle_auth_packet)
 
@@ -327,6 +365,7 @@ class Server(host.Host):
             PacketType.AccountingResponse,
         ]:
             raise ServerPacketError("Received non-accounting packet on accounting port")
+        self._verify_request_authenticator(pkt)
         self._validate_message_authenticator_policy(pkt)
         self._dedup_dispatch(pkt, self.handle_acct_packet)
 
@@ -341,17 +380,24 @@ class Server(host.Host):
         """
         self._add_secret(pkt)
         if pkt.code == PacketType.CoARequest:
+            self._verify_request_authenticator(pkt)
             self._validate_message_authenticator_policy(pkt)
             self._dedup_dispatch(pkt, self.handle_coa_packet)
         elif pkt.code == PacketType.DisconnectRequest:
+            self._verify_request_authenticator(pkt)
             self._validate_message_authenticator_policy(pkt)
             self._dedup_dispatch(pkt, self.handle_disconnect_packet)
         else:
             raise ServerPacketError("Received non-coa packet on coa port")
 
-    def _grab_packet(self, pktgen: Callable, fd: socket.socket) -> packet.Packet:
+    def _grab_packet(self, fd: socket.socket) -> packet.Packet:
         """Read a packet from a network connection.
-        This method assumes there is data waiting for to be read.
+        This method assumes there is data waiting to be read.
+
+        Looks up the source address against ``self.hosts`` first so unknown
+        sources are dropped before any attribute parsing runs, and parses
+        the packet with the host's real shared secret (which lets
+        ``verify_*_request`` MD5 checks pass without a re-parse).
 
         Args:
             fd (socket.socket): Socket to read packet from
@@ -360,7 +406,8 @@ class Server(host.Host):
             packet.Packet: RADIUS packet
         """
         (data, source) = fd.recvfrom(self.MAX_PACKET_SIZE)
-        pkt = pktgen(data)
+        secret = self._lookup_secret(source[0])
+        pkt = packet.parse_packet(data, secret, self.dict)
         pkt.source = source
         pkt.fd = fd
         return pkt
@@ -434,19 +481,13 @@ class Server(host.Host):
             fd (socket.socket): Socket to read the packet from
         """
         if self.auth_enabled and fd.fileno() in self._realauthfds:
-            pkt = self._grab_packet(
-                lambda data, s=self: packet.parse_packet(data, b"", s.dict), fd
-            )
+            pkt = self._grab_packet(fd)
             self._handle_auth_packet(pkt)
         elif self.acct_enabled and fd.fileno() in self._realacctfds:
-            pkt = self._grab_packet(
-                lambda data, s=self: packet.parse_packet(data, b"", s.dict), fd
-            )
+            pkt = self._grab_packet(fd)
             self._handle_acct_packet(pkt)
         elif self.coa_enabled:
-            pkt = self._grab_packet(
-                lambda data, s=self: packet.parse_packet(data, b"", s.dict), fd
-            )
+            pkt = self._grab_packet(fd)
             self._handle_coa_packet(pkt)
         else:
             raise ServerPacketError("Received packet for unknown handler")

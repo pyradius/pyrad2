@@ -160,6 +160,7 @@ class SyncServerDedupTests(unittest.TestCase):
         self.remote_host = RemoteHost("10.0.0.1", b"secret", "host")
 
     def _server(self, **kwargs):
+        kwargs.setdefault("require_message_authenticator", False)
         return _CountingServer(
             hosts={"10.0.0.1": self.remote_host},
             dict=self.dictionary,
@@ -264,6 +265,8 @@ class AsyncServerDedupTests(unittest.TestCase):
         server = DedupServer(
             dictionary=self.dictionary,
             hosts={"10.0.0.1": self.remote_host},
+            require_message_authenticator=False,
+            enable_pkt_verify=False,
         )
         protocol = self._protocol_for(server)
 
@@ -292,6 +295,8 @@ class AsyncServerDedupTests(unittest.TestCase):
             dictionary=self.dictionary,
             hosts={"10.0.0.1": self.remote_host},
             dedup_enabled=False,
+            require_message_authenticator=False,
+            enable_pkt_verify=False,
         )
         protocol = self._protocol_for(server)
 

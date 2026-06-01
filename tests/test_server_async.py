@@ -142,7 +142,11 @@ class ServerAsyncTests(unittest.IsolatedAsyncioTestCase):
 
     def test_message_authenticator_policy_rejects_eap_without_ma(self):
         dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
-        server = DummyServer(dictionary=dictionary)
+        # require_message_authenticator=False isolates the EAP-specific
+        # policy gate (otherwise the general BlastRADIUS rule fires first).
+        server = DummyServer(
+            dictionary=dictionary, require_message_authenticator=False
+        )
         pkt = packet.AuthPacket(
             id=1,
             secret=b"secret",

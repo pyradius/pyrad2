@@ -113,18 +113,44 @@ class SocketTests(unittest.TestCase):
         self.assertEqual(self.server.acctfds[0].address, ("2001:db8:123::1", 1813))
 
     def testgrab_packet(self):
-        def gen(data):
+        from pyrad2 import packet as packet_mod
+
+        captured: dict[str, object] = {}
+
+        def fake_parse(data, secret, dictionary):
+            captured["data"] = data
+            captured["secret"] = secret
+            captured["dict"] = dictionary
             res = TrivialObject()
             res.data = data
             return res
 
+        host = TrivialObject()
+        host.secret = b"sharedsecret"
+        self.server.hosts["10.0.0.1"] = host
+
         fd = MockFd()
-        fd.source = object()
-        pkt = self.server._grab_packet(gen, fd)
+        fd.source = ("10.0.0.1", 4242)
+        fd.data = b"raw-bytes"
+
+        orig_parse = packet_mod.parse_packet
+        packet_mod.parse_packet = fake_parse
+        try:
+            pkt = self.server._grab_packet(fd)
+        finally:
+            packet_mod.parse_packet = orig_parse
+
         self.assertTrue(isinstance(pkt, TrivialObject))
         self.assertTrue(pkt.fd is fd)
-        self.assertTrue(pkt.source is fd.source)
-        self.assertTrue(pkt.data is fd.data)
+        self.assertEqual(pkt.source, ("10.0.0.1", 4242))
+        self.assertEqual(captured["secret"], b"sharedsecret")
+        self.assertEqual(captured["data"], b"raw-bytes")
+
+    def testgrab_packet_unknown_host_raises(self):
+        fd = MockFd()
+        fd.source = ("stranger", 1812)
+        with self.assertRaisesRegex(ServerPacketError, "unknown host"):
+            self.server._grab_packet(fd)
 
     def testPrepareSocketNoFds(self):
         self.server._poll = MockPoll()
@@ -257,8 +283,12 @@ class MessageAuthenticatorPolicyTests(unittest.TestCase):
         pkt = self._auth_packet()
         pkt[79] = [b"\x02\x01\x00\x05\x01"]
 
+        # require_message_authenticator=False isolates the EAP-specific
+        # policy gate (otherwise the general BlastRADIUS rule fires first).
         with self.assertRaisesRegex(PacketError, "EAP-Message requires"):
-            self._server()._handle_auth_packet(self._parse_auth_packet(pkt))
+            self._server(
+                require_message_authenticator=False
+            )._handle_auth_packet(self._parse_auth_packet(pkt))
 
     def test_valid_message_authenticator_is_accepted(self):
         server = self._server()
@@ -285,6 +315,15 @@ class MessageAuthenticatorPolicyTests(unittest.TestCase):
             self._server(require_message_authenticator=True)._handle_auth_packet(
                 self._parse_auth_packet(pkt)
             )
+
+    def test_blastradius_default_rejects_plain_auth_request(self):
+        # C2 regression: the constructor default now mitigates BlastRADIUS
+        # (CVE-2024-3596). A plain Access-Request without Message-Authenticator
+        # MUST be rejected without the caller having to opt in.
+        pkt = self._auth_packet()
+
+        with self.assertRaisesRegex(PacketError, "attribute is required"):
+            self._server()._handle_auth_packet(self._parse_auth_packet(pkt))
 
     def test_create_reply_packet_preserves_request_message_authenticator_policy(self):
         server = self._server()
@@ -410,7 +449,7 @@ class OtherTests(unittest.TestCase):
         self.assertEqual(
             [x[0] for x in self.server.called], ["_grab_packet", "_handle_auth_packet"]
         )
-        self.assertEqual(self.server.called[0][1][1], fd)
+        self.assertEqual(self.server.called[0][1][0], fd)
 
     def testAcctProcessInput(self):
         fd = MockFd(1)
@@ -423,7 +462,7 @@ class OtherTests(unittest.TestCase):
         self.assertEqual(
             [x[0] for x in self.server.called], ["_grab_packet", "_handle_acct_packet"]
         )
-        self.assertEqual(self.server.called[0][1][1], fd)
+        self.assertEqual(self.server.called[0][1][0], fd)
 
 
 class ServerRunTests(unittest.TestCase):

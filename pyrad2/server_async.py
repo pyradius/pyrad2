@@ -218,9 +218,9 @@ class ServerAsync(ABC):
         coa_port: int = 3799,
         hosts: Optional[Dict[str, RemoteHost]] = None,
         dictionary: Optional[Dictionary] = None,
-        enable_pkt_verify: bool = False,
+        enable_pkt_verify: bool = True,
         debug: bool = False,
-        require_message_authenticator: bool = False,
+        require_message_authenticator: bool = True,
         require_eap_message_authenticator: bool = True,
         dedup_enabled: bool = True,
         dedup_ttl: float = 30.0,
@@ -235,9 +235,12 @@ class ServerAsync(ABC):
             coa_port (int): Port to listen on for Dynamic Authorization packets.
             hosts (dict[str, RemoteHost]): Hosts who we can talk to. A dictionary mapping IP to RemoteHost class instances.
             dictionary (Dictionary): RADIUS dictionary to use.
-            enable_pkt_verify (bool): If true, the packet will be verified against its secret
+            enable_pkt_verify (bool): If true, the packet will be verified
+                against its secret (default: True).
             require_message_authenticator (bool): Require Message-Authenticator
-                on incoming packets.
+                on incoming packets (default: True). Mitigates BlastRADIUS
+                (CVE-2024-3596). Disable only to bridge legacy NASes that
+                don't emit the attribute.
             require_eap_message_authenticator (bool): Require
                 Message-Authenticator on packets containing EAP-Message.
             dedup_enabled (bool): Enable RFC 5080 duplicate detection and

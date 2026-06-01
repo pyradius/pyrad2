@@ -61,7 +61,7 @@ class MockPacket:
     replypacket = object()
     source = object()
 
-    def Packet(self):
+    def request_packet(self):
         return self.packet
 
     def reply_packet(self):

@@ -1228,3 +1228,97 @@ class EvsAttributeTests(unittest.TestCase):
         pkt.decode_packet(header + attrs)
         # Stored as a normal extended sub-attribute, not split as EVS.
         self.assertEqual(pkt[241], {26: [b"payload"]})
+
+
+class BlastRadiusHardeningTests(unittest.TestCase):
+    """Regression coverage for the C1/C4 security defaults.
+
+    C1: every MAC/MD5 compare in the verify path goes through
+        ``hmac.compare_digest`` rather than ``==``.
+    C4: ``salt_crypt`` must never seed the keystream with an all-zero
+        Request Authenticator, and the server must reject Access-Request
+        packets whose Authenticator is all-zero.
+    """
+
+    def setUp(self):
+        self.path = os.path.join(TEST_ROOT_PATH, "data")
+        self.dict = Dictionary(os.path.join(self.path, "full"))
+
+    def test_verify_paths_use_constant_time_compare(self):
+        import pyrad2.packet as packet_mod
+
+        calls: list[tuple[bytes, bytes]] = []
+        real_compare_digest = hmac.compare_digest
+
+        def spy(a, b):
+            calls.append((bytes(a), bytes(b)))
+            return real_compare_digest(a, b)
+
+        request = packet.AuthPacket(
+            id=1,
+            secret=b"secret",
+            authenticator=b"0123456789ABCDEF",
+            dict=self.dict,
+        )
+        request.add_message_authenticator()
+        request.raw_packet = request.request_packet()
+        reply = request.create_reply()
+        reply.add_message_authenticator()
+        rawreply = reply.reply_packet()
+
+        original = packet_mod.hmac.compare_digest
+        packet_mod.hmac.compare_digest = spy
+        try:
+            # verify_reply runs Response Authenticator MD5 compare and
+            # Message-Authenticator HMAC compare; both must go through
+            # compare_digest, not ==.
+            self.assertTrue(
+                request.verify_reply(
+                    reply=request.create_reply(packet=rawreply),
+                    rawreply=rawreply,
+                    enforce_ma=True,
+                )
+            )
+        finally:
+            packet_mod.hmac.compare_digest = original
+
+        # We expect at least two compare_digest invocations: one for the
+        # Response Authenticator MD5 and one for the reply's
+        # Message-Authenticator HMAC.
+        self.assertGreaterEqual(len(calls), 2)
+
+    def test_salt_crypt_seeds_random_authenticator(self):
+        pkt = packet.AuthPacket(id=1, secret=b"secret", dict=self.dict)
+        self.assertIsNone(pkt.authenticator)
+
+        encoded = pkt.salt_crypt(b"hunter2")
+
+        # Authenticator must be seeded by salt_crypt and must not be the
+        # all-zero fallback that used to leak keystream determinism.
+        self.assertIsNotNone(pkt.authenticator)
+        assert pkt.authenticator is not None
+        self.assertEqual(len(pkt.authenticator), 16)
+        self.assertNotEqual(pkt.authenticator, b"\x00" * 16)
+        # Sanity: ciphertext layout (2-byte salt + payload) is intact.
+        self.assertEqual(len(encoded) % 16, 2)
+
+    def test_verify_auth_request_rejects_zero_authenticator(self):
+        """Server-side guard: a v1.0 Access-Request with an all-zero
+        Authenticator is rejected (RFC 2865 §3 requires unpredictability;
+        an all-zero value lets an attacker recover salt-encrypted attrs)."""
+        attrs = b""
+        header = struct.pack("!BBH16s", PacketType.AccessRequest, 1, 20, b"\x00" * 16)
+        pkt = packet.AuthPacket(
+            packet=header + attrs, secret=b"secret", dict=self.dict
+        )
+        self.assertFalse(pkt.verify_auth_request())
+
+    def test_verify_auth_request_accepts_random_authenticator(self):
+        attrs = b""
+        header = struct.pack(
+            "!BBH16s", PacketType.AccessRequest, 1, 20, b"0123456789ABCDEF"
+        )
+        pkt = packet.AuthPacket(
+            packet=header + attrs, secret=b"secret", dict=self.dict
+        )
+        self.assertTrue(pkt.verify_auth_request())

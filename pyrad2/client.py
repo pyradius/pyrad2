@@ -31,7 +31,7 @@ class Client(host.Host):
         dict: Optional[Dictionary] = None,
         retries: int = 3,
         timeout: int = 5,
-        enforce_ma: bool = False,
+        enforce_ma: bool = True,
     ):
         """Initializes a RADIUS client.
 
@@ -44,7 +44,10 @@ class Client(host.Host):
             dict (pyrad.dictionary.Dictionary): RADIUS dictionary.
             retries (int): Number of times to retry sending a RADIUS request.
             timeout (int): Number of seconds to wait for an answer.
-            enforce_ma (bool): Enforce usage of Message-Authenticator
+            enforce_ma (bool): Enforce Message-Authenticator on requests
+                and replies (default: True). Mitigates BlastRADIUS
+                (CVE-2024-3596). Disable only when talking to a legacy
+                server that can't process the attribute.
         """
         super().__init__(authport, acctport, coaport, dict)
 

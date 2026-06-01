@@ -176,6 +176,14 @@ class ExampleCertificateTests(unittest.TestCase):
 
 
 class RadSecServer(BaseRadSecServer):
+    # Test subclass: legacy fixtures here build plain Access-Requests
+    # without a Message-Authenticator AVP. Default the BlastRADIUS knob
+    # off so unrelated tests keep working; the MA-policy tests still
+    # set it back to True explicitly.
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("require_message_authenticator", False)
+        super().__init__(*args, **kwargs)
+
     async def handle_access_request(self, packet):
         reply = packet.create_reply(
             **{
@@ -201,6 +209,10 @@ class RadSecServer(BaseRadSecServer):
 
 
 class AuthAcctOnlyRadSecServer(BaseRadSecServer):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("require_message_authenticator", False)
+        super().__init__(*args, **kwargs)
+
     async def handle_access_request(self, packet):
         reply = packet.create_reply()
         reply.code = PacketType.AccessAccept
@@ -214,11 +226,17 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
 
+        # require_message_authenticator=False / enforce_ma=False keep the
+        # legacy test fixtures (which build plain Access-Requests without a
+        # Message-Authenticator AVP) working under the BlastRADIUS-default
+        # constructors. Tests that exercise the policy gate set it back to
+        # True explicitly.
         self.server = RadSecServer(
             certfile=SERVER_CERTFILE,
             keyfile=SERVER_KEYFILE,
             ca_certfile=CA_CERTFILE,
             dictionary=self.dictionary,
+            require_message_authenticator=False,
         )
         self.server.hosts = {"127.0.0.1": TEST_HOST}
 

@@ -91,7 +91,7 @@ class Host:
             fd (socket.socket): Socket to send packet with
             pkt (packet.Packet): The packet instance
         """
-        fd.sendto(pkt.Packet(), pkt.source)
+        fd.sendto(pkt.request_packet(), pkt.source)
 
     def send_reply_packet(self, fd: socket.socket, pkt: packet.Packet) -> None:
         """Send a packet.

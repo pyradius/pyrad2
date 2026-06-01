@@ -944,6 +944,13 @@ def _free_port() -> int:
 class _IntegrationServer(RadSecServer):
     captured: AuthPacket | None = None
 
+    # Tests below build legacy v1.0 packets without a Message-Authenticator
+    # AVP. Default the BlastRADIUS knob off so the negotiation/round-trip
+    # tests keep working.
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("require_message_authenticator", False)
+        super().__init__(*args, **kwargs)
+
     async def handle_access_request(self, packet):
         type(self).captured = packet
         reply = packet.create_reply()

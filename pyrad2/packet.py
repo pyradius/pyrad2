@@ -486,7 +486,7 @@ class Packet(OrderedDict):
 
         hmac_constructor.update(attr)
         self["Message-Authenticator"] = prev_ma[0]
-        return prev_ma[0] == hmac_constructor.digest()
+        return hmac.compare_digest(prev_ma[0], hmac_constructor.digest())
 
     def require_valid_message_authenticator(
         self,
@@ -969,7 +969,7 @@ class Packet(OrderedDict):
             rawreply[0:4] + self.authenticator + rawreply[20:] + self.secret  # type: ignore
         ).digest()
 
-        if hash != rawreply[4:20]:
+        if not hmac.compare_digest(hash, rawreply[4:20]):
             return False
 
         if reply.has_message_authenticator():
@@ -1485,8 +1485,10 @@ class Packet(OrderedDict):
             value = value.encode("utf-8")
 
         if self.authenticator is None:
-            # self.authenticator = self.create_authenticator()
-            self.authenticator = 16 * b"\x00"
+            # Deriving the keystream from a zero Authenticator makes the
+            # ciphertext recoverable without knowing the shared secret —
+            # always seed with fresh entropy.
+            self.authenticator = self.create_authenticator()
 
         # create salt
         random_value = 32768 + random_generator.randrange(0, 32767)
@@ -1536,7 +1538,7 @@ class Packet(OrderedDict):
         hash = hashlib.md5(
             self.raw_packet[0:4] + 16 * b"\x00" + self.raw_packet[20:] + self.secret
         ).digest()
-        return hash == self.authenticator
+        return hmac.compare_digest(hash, self.authenticator)
 
 
 class StatusPacket(Packet):
@@ -1833,19 +1835,36 @@ class AuthPacket(Packet):
             if "CHAP-Challenge" in self:
                 challenge = self["CHAP-Challenge"][0]
 
-        return password == hashlib.md5(chapid + userpwd + challenge).digest()
+        return hmac.compare_digest(
+            password, hashlib.md5(chapid + userpwd + challenge).digest()
+        )
 
     def verify_auth_request(self) -> bool:
-        """Verify request authenticator.
+        """Verify an incoming Access-Request.
 
-        Returns:
-            bool: True if verification passed else False
+        Access-Request has no MD5 MAC over the body (the Request
+        Authenticator is a 16-byte random nonce), so this method enforces
+        the structural invariants that are checkable:
+
+        - Packet code is Access-Request.
+        - The Request Authenticator is not all-zero (RFC 2865 §3 says it
+          MUST be unpredictable; an all-zero value lets an attacker who
+          observes the packet recover salt-encrypted attributes such as
+          ``Tunnel-Password`` and the MS-MPPE keys without knowing the
+          shared secret).
+
+        RADIUS/1.1 packets skip the nonce check — TLS authenticates the
+        bytes and ``self.authenticator`` is unset after decode.
         """
         if not self.raw_packet:
             raise ValueError("Raw packet not present")
 
         if not self.raw_packet[0] == PacketType.AccessRequest:
             return False
+
+        if self.radius_version != RadiusVersion.V1_1:
+            if not self.authenticator or self.authenticator == b"\x00" * 16:
+                return False
 
         return True
 
