@@ -29,7 +29,11 @@ from pyrad2.tools import cert_fingerprint_matches, normalize_cert_fingerprint
 
 
 class RadSecClient:
-    DEFAULT_MINIMUM_TLS_VERSION = ssl.TLSVersion.TLSv1_2
+    # TLS 1.3 by default. RFC 9325 deprecates TLS 1.1 and below and treats
+    # 1.2 as legacy; RFC 9750 mandates 1.3 for RADIUS/1.1. Set
+    # ``minimum_tls_version=ssl.TLSVersion.TLSv1_2`` explicitly to bridge
+    # legacy peers that can't negotiate 1.3 yet.
+    DEFAULT_MINIMUM_TLS_VERSION = ssl.TLSVersion.TLSv1_3
 
     def __init__(
         self,
@@ -64,7 +68,10 @@ class RadSecClient:
             keyfile (str): Path to client SSL certificate
             certfile_server (str): Path to server SSL certificate
             check_hostname (bool): Validate the server certificate name.
-            minimum_tls_version (ssl.TLSVersion): Lowest TLS version to negotiate.
+            minimum_tls_version (ssl.TLSVersion): Lowest TLS version to
+                negotiate. Defaults to TLS 1.3 (RFC 9325 / RFC 9750).
+                Pass ``ssl.TLSVersion.TLSv1_2`` explicitly to talk to a
+                legacy server that can't yet negotiate 1.3.
             ciphers (str): Optional OpenSSL cipher string override.
             allowed_server_fingerprints (Iterable[str]): Optional SHA-256 certificate
                 fingerprint allowlist for the server certificate.

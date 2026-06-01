@@ -281,6 +281,40 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             RadSecClient.DEFAULT_MINIMUM_TLS_VERSION,
         )
 
+    def test_default_minimum_tls_version_is_1_3(self):
+        # Regression: RFC 9325 deprecates TLS 1.1 and below and treats 1.2
+        # as legacy; RFC 9750 mandates 1.3 for RADIUS/1.1. Both sides
+        # must default to TLS 1.3 so a fresh install doesn't accept the
+        # weaker handshake without an explicit opt-down.
+        self.assertEqual(
+            BaseRadSecServer.DEFAULT_MINIMUM_TLS_VERSION, ssl.TLSVersion.TLSv1_3
+        )
+        self.assertEqual(
+            RadSecClient.DEFAULT_MINIMUM_TLS_VERSION, ssl.TLSVersion.TLSv1_3
+        )
+
+    def test_legacy_tls_1_2_is_still_reachable_with_explicit_opt_out(self):
+        # Operators bridging a legacy peer must still be able to pin the
+        # floor at TLS 1.2 by passing the kwarg explicitly.
+        server = RadSecServer(
+            certfile=SERVER_CERTFILE,
+            keyfile=SERVER_KEYFILE,
+            ca_certfile=CA_CERTFILE,
+            dictionary=self.dictionary,
+            minimum_tls_version=ssl.TLSVersion.TLSv1_2,
+        )
+        self.assertEqual(server.ssl_ctx.minimum_version, ssl.TLSVersion.TLSv1_2)
+        client = RadSecClient(
+            server="127.0.0.1",
+            secret=b"radsec",
+            dict=self.dictionary,
+            certfile=CLIENT_CERTFILE,
+            keyfile=CLIENT_KEYFILE,
+            certfile_server=CA_CERTFILE,
+            minimum_tls_version=ssl.TLSVersion.TLSv1_2,
+        )
+        self.assertEqual(client.ssl_ctx.minimum_version, ssl.TLSVersion.TLSv1_2)
+
     def test_client_can_disable_hostname_validation_explicitly(self):
         client = RadSecClient(
             server="127.0.0.1",

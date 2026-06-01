@@ -317,7 +317,12 @@ server = RadSecServer(
 
 A connection is rejected exactly when one side is configured *only* for v1.1 and the other side doesn't advertise the `radius/1.1` ALPN.
 
-RFC 9765 §3.4 also mandates **TLS 1.3 or later** whenever v1.1 is in play. `RadSecServer` and `RadSecClient` automatically promote `minimum_tls_version` to `TLSv1_3` when v1.1 is configured.
+**TLS 1.3 is the default for RadSec** on both sides ([RFC 9325](https://datatracker.ietf.org/doc/html/rfc9325) deprecates 1.1 and below and treats 1.2 as legacy). RFC 9765 §3.4 additionally mandates **TLS 1.3 or later** whenever v1.1 is in play, and `RadSecServer` / `RadSecClient` auto-promote `minimum_tls_version` to `TLSv1_3` when v1.1 is configured. To bridge a legacy peer that can't yet negotiate 1.3 on a pure v1.0 deployment, pin the floor down explicitly:
+
+```python
+import ssl
+RadSecServer(..., minimum_tls_version=ssl.TLSVersion.TLSv1_2)
+```
 
 The negotiated version is available on every parsed packet as `packet.radius_version`. The RadSec server logs `RADSEC connection established from ... (ALPN=..., RADIUS/...)` on every handshake.
 

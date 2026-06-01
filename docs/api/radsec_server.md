@@ -4,7 +4,7 @@ RadSec uses RADIUS over TLS on TCP port 2083. PyRad2's RadSec server uses secure
 TLS defaults:
 
 - client certificates are required by default (`ssl.CERT_REQUIRED`)
-- TLS 1.2 or newer is required by default
+- **TLS 1.3 or newer** is required by default ([RFC 9325](https://datatracker.ietf.org/doc/html/rfc9325) deprecates TLS 1.1 and below and treats 1.2 as legacy; [RFC 9750](https://datatracker.ietf.org/doc/html/rfc9750) mandates 1.3 for RADIUS/1.1). Pass `minimum_tls_version=ssl.TLSVersion.TLSv1_2` to opt down for a legacy peer.
 - the server can optionally restrict clients by SHA-256 certificate fingerprint
 
 The examples include a local development CA, server certificate, and client

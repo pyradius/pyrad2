@@ -4,6 +4,30 @@ RadSec is a TCP/TLS stream transport. `RadSecClient` reuses its TLS connection
 by default so multiple `send_packet()` calls can share the same connection. This
 is the recommended mode for normal RadSec use.
 
+## TLS defaults
+
+`RadSecClient` ships with secure TLS defaults:
+
+- the server certificate is validated against `certfile_server`
+- hostname validation is on (`check_hostname=True`)
+- **TLS 1.3 or newer** is required by default ([RFC 9325](https://datatracker.ietf.org/doc/html/rfc9325) deprecates TLS 1.1 and below and treats 1.2 as legacy; [RFC 9750](https://datatracker.ietf.org/doc/html/rfc9750) mandates 1.3 for RADIUS/1.1)
+- the client can optionally pin server certificates by SHA-256 fingerprint via `allowed_server_fingerprints`
+
+To bridge a legacy server that can't yet negotiate 1.3 on a pure v1.0 deployment, pin the floor at 1.2 explicitly:
+
+```python
+import ssl
+
+client = RadSecClient(
+    server="legacy.example.com",
+    secret=b"radsec",
+    dict=dictionary,
+    minimum_tls_version=ssl.TLSVersion.TLSv1_2,  # legacy peer
+)
+```
+
+If `radius_versions` includes `V1_1`, the floor is auto-promoted to 1.3 regardless of what you pass.
+
 Use `reuse_connection=False` only as a legacy/compatibility escape hatch when a
 deployment specifically needs one TLS connection per packet, such as for
 interoperability debugging, short-lived scripts, or a peer that cannot handle

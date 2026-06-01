@@ -226,4 +226,20 @@ To distinguish that case from a normal timeout, check `client.last_error` after 
 
 ### TLS version
 
-RFC 9765 §3.4 mandates **TLS 1.3 or later** whenever v1.1 is configured. The constructor auto-promotes `minimum_tls_version` to `TLSv1_3` in that case.
+`RadSecClient` defaults `minimum_tls_version` to **TLS 1.3** ([RFC 9325](https://datatracker.ietf.org/doc/html/rfc9325) treats 1.2 as legacy; [RFC 9750](https://datatracker.ietf.org/doc/html/rfc9750) mandates 1.3 for RADIUS/1.1).
+
+To bridge a legacy server that can't yet negotiate 1.3, pin the floor at 1.2 explicitly:
+
+```python
+import ssl
+from pyrad2.radsec.client import RadSecClient
+
+client = RadSecClient(
+    server="legacy.example.com",
+    secret=b"radsec",
+    dict=dictionary,
+    minimum_tls_version=ssl.TLSVersion.TLSv1_2,  # legacy peer
+)
+```
+
+If `radius_versions` includes `V1_1`, the floor is auto-promoted to 1.3 regardless of what you pass (RFC 9750 §3.4).
