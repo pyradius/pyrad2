@@ -157,8 +157,8 @@ class SocketTests(unittest.TestCase):
         self.server._prepare_sockets()
 
         self.assertEqual(self.server._poll.registry, {})
-        self.assertEqual(self.server._realauthfds, [])
-        self.assertEqual(self.server._realacctfds, [])
+        self.assertEqual(self.server._realauthfds, set())
+        self.assertEqual(self.server._realacctfds, set())
 
     def testPrepareSocketAuthFds(self):
         self.server._poll = MockPoll()

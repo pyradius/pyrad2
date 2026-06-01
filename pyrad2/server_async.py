@@ -1,7 +1,6 @@
 import asyncio
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from enum import Enum
 from typing import Any, Callable, Dict, Optional
 
 from loguru import logger
@@ -9,26 +8,13 @@ from loguru import logger
 from pyrad2 import dedup
 from pyrad2.constants import ErrorCause, PacketType
 from pyrad2.dictionary import Dictionary
-from pyrad2.packet import (
-    AcctPacket,
-    AuthPacket,
-    CoAPacket,
-    Packet,
-    PacketError,
-    StatusPacket,
-    prepare_reply_message_authenticator,
-)
-
-_ACCESS_REPLY_CODES = frozenset(
-    {PacketType.AccessAccept, PacketType.AccessReject, PacketType.AccessChallenge}
-)
+from pyrad2.packet import Packet, StatusPacket
+from pyrad2.router import RequestRouter, ServerType
 from pyrad2.server import RemoteHost, ServerPacketError
 
-
-class ServerType(Enum):
-    Auth = "Authentication"
-    Acct = "Accounting"
-    Coa = "Dynamic Authorization"
+# Re-export so existing imports of ``pyrad2.server_async.ServerType``
+# keep working after the move to ``pyrad2.router``.
+__all__ = ["DatagramProtocolServer", "RemoteHost", "ServerAsync", "ServerType"]
 
 
 ERROR_CAUSE_ATTRIBUTE = 101
@@ -69,14 +55,14 @@ class DatagramProtocolServer(asyncio.DatagramProtocol):
         # for EAP State and Message-Authenticator).
         raw = reply.reply_packet()
         self.transport.sendto(raw, addr)
-        dedup.record_if_keyed(self.server._dedup_cache, reply, raw)
+        self.server._router.record_reply(reply, raw)
 
     def _handle_status_server(
-        self, data: bytes, remote_host: RemoteHost, addr: tuple[str | Any, int]
+        self, data: bytes, secret: bytes, addr: tuple[str | Any, int]
     ) -> None:
         """Reply to Status-Server without invoking normal request callbacks."""
-        req = StatusPacket(secret=remote_host.secret, dict=self.server.dict, packet=data)
-        self.server.validate_message_authenticator_policy(req)
+        req = StatusPacket(secret=secret, dict=self.server.dict, packet=data)
+        self.server._router.validate_message_authenticator_policy(req)
         reply = self.server.create_status_response(req, self.server_type)
         logger.debug(
             "[{}:{}] Received Status-Server from {}; replying with {}",
@@ -92,13 +78,19 @@ class DatagramProtocolServer(asyncio.DatagramProtocol):
             "[{}:{}] Received {} bytes from {}", self.ip, self.port, len(data), addr
         )
         receive_date = datetime.now(timezone.utc)
+        router = self.server._router
 
-        remote_host = self.hosts.get(addr[0], self.hosts.get("0.0.0.0"))
+        # The protocol's own ``hosts`` mapping is authoritative for lookup
+        # (it can be a per-listener subset of the server's hosts). The
+        # router's parse / verify / MA-policy chain then uses the secret
+        # we resolved here.
+        remote_host = self.hosts.get(addr[0]) or self.hosts.get("0.0.0.0")
         if not remote_host:
             logger.warning(
                 "[{}:{}] Drop packet from unknown source {}", self.ip, self.port, addr
             )
             return
+        secret = remote_host.secret
 
         try:
             logger.debug(
@@ -108,66 +100,22 @@ class DatagramProtocolServer(asyncio.DatagramProtocol):
                 addr,
                 data.hex(),
             )
-            # Peek at the code byte directly so we only decode once — the
-            # subsequent typed construction (AuthPacket / AcctPacket /
-            # CoAPacket) does the real parse.
             if len(data) < 1:
                 raise ServerPacketError("Packet too short to contain a code byte")
             code = data[0]
-            req: Packet  # one of the typed subclasses below
+            router.reject_response_codes(code)
 
-            if code in (
-                PacketType.AccountingResponse,
-                PacketType.AccessAccept,
-                PacketType.AccessReject,
-                PacketType.CoANAK,
-                PacketType.CoAACK,
-                PacketType.DisconnectNAK,
-                PacketType.DisconnectACK,
-            ):
-                raise ServerPacketError(f"Invalid response packet {code}")
+            # Status-Server has its own reply path: validate MA and
+            # synthesize the reply without invoking the user handler.
+            if code == PacketType.StatusServer:
+                router.gate_code(code, self.server_type)
+                self._handle_status_server(data, secret, addr)
+                return
 
-            if self.server_type == ServerType.Auth:
-                if code == PacketType.StatusServer:
-                    self._handle_status_server(data, remote_host, addr)
-                    return
-                if code != PacketType.AccessRequest:
-                    raise ServerPacketError("Received non-auth packet on auth port")
-                req = AuthPacket(
-                    secret=remote_host.secret, dict=self.server.dict, packet=data
-                )
-                if self.server.enable_pkt_verify and not req.verify_auth_request():
-                    raise PacketError("Packet verification failed")
-
-            elif self.server_type == ServerType.Coa:
-                if code == PacketType.StatusServer:
-                    raise ServerPacketError("Received status packet on coa port")
-                if code not in (
-                    PacketType.DisconnectRequest,
-                    PacketType.CoARequest,
-                ):
-                    raise ServerPacketError("Received non-coa packet on coa port")
-                req = CoAPacket(
-                    secret=remote_host.secret, dict=self.server.dict, packet=data
-                )
-                if self.server.enable_pkt_verify and not req.verify_packet():
-                    raise PacketError("Packet verification failed")
-
-            elif self.server_type == ServerType.Acct:
-                if code == PacketType.StatusServer:
-                    self._handle_status_server(data, remote_host, addr)
-                    return
-                if code != PacketType.AccountingRequest:
-                    raise ServerPacketError("Received non-acct packet on acct port")
-                req = AcctPacket(
-                    secret=remote_host.secret, dict=self.server.dict, packet=data
-                )
-                if self.server.enable_pkt_verify and not req.verify_packet():
-                    raise PacketError("Packet verification failed")
-            else:
-                raise ServerPacketError(f"Unknown server type {self.server_type}")
-
-            self.server.validate_message_authenticator_policy(req)
+            router.gate_code(code, self.server_type)
+            req = router.parse(data, secret)
+            router.verify_request(req)
+            router.validate_message_authenticator_policy(req)
             self.request_callback(self, req, addr)
         except Exception as exc:
             if self.server.debug:
@@ -278,28 +226,25 @@ class ServerAsync(ABC):
         self.acct_protocols: list[asyncio.Protocol] = []
         self.coa_protocols: list[asyncio.Protocol] = []
 
-    def validate_message_authenticator_policy(self, req: Packet) -> None:
-        """Validate incoming Message-Authenticator policy for a request."""
-        req.validate_message_authenticator_policy(
+        # Shared transport-neutral dispatch helper. The sync server owns
+        # its own RequestRouter instance with the same fields, so the
+        # two transports can't drift apart on policy.
+        self._router = RequestRouter(
+            hosts=self.hosts,
+            dictionary=self.dict,
+            enable_pkt_verify=self.enable_pkt_verify,
             require_message_authenticator=self.require_message_authenticator,
             require_eap_message_authenticator=self.require_eap_message_authenticator,
+            dedup_cache=self._dedup_cache,
         )
+
+    def validate_message_authenticator_policy(self, req: Packet) -> None:
+        """Validate incoming Message-Authenticator policy for a request."""
+        self._router.validate_message_authenticator_policy(req)
 
     def prepare_reply_packet(self, reply: Packet) -> None:
         """Apply outgoing Message-Authenticator policy to a reply packet."""
-        if not isinstance(reply, Packet):
-            return
-        # BlastRADIUS mitigation only forces MA on Access replies; the
-        # other reply codes are already integrity-protected by their
-        # Response Authenticator MD5.
-        force_ma_for_access = (
-            self.require_message_authenticator
-            and reply.code in _ACCESS_REPLY_CODES
-        )
-        if force_ma_for_access or (
-            self.require_eap_message_authenticator and reply.has_eap_message()
-        ):
-            reply.ensure_message_authenticator()
+        self._router.force_reply_ma(reply)
 
     def create_status_response(
         self, pkt: StatusPacket, server_type: ServerType
@@ -357,16 +302,12 @@ class ServerAsync(ABC):
         handler: Callable[["DatagramProtocolServer", Packet, tuple[str | Any, int]], None],
     ) -> None:
         """Wrap ``handler(protocol, req, addr)`` with RFC 5080 dedup."""
-        key = (
-            dedup.key_for(req, source=addr)
-            if self._dedup_cache is not None
-            else None
-        )
+        key = self._router.dedup_key_for(req, source=addr)
 
         def _resend(raw: bytes) -> None:
             protocol.transport.sendto(raw, addr)
 
-        action = dedup.consult_cache(self._dedup_cache, key, _resend)
+        action = self._router.dedup_consult(key, _resend)
         if action is dedup.DispatchAction.DROP:
             logger.debug(
                 "[{}:{}] Dropping duplicate in-flight request from {}",
@@ -389,8 +330,7 @@ class ServerAsync(ABC):
         try:
             handler(protocol, req, addr)
         finally:
-            if key is not None and self._dedup_cache is not None:
-                self._dedup_cache.drop_in_flight(key)
+            self._router.dedup_drop_in_flight(key)
 
     async def initialize_transports(
         self,
@@ -460,26 +400,13 @@ class ServerAsync(ABC):
             pkt (packet.Packet): Packet to process
             attributes (dict): Custom attributes to be added to the reply
         """
-        server = self if isinstance(self, ServerAsync) else None
-        if server is None:
-            request = self  # type: ignore[assignment]
-        else:
-            if pkt is None:
-                raise ValueError("Missing packet to reply to")
-            request = pkt
-        reply = request.create_reply(**attributes)
-        if server is not None:
-            prepare_reply_message_authenticator(
-                request,
-                reply,
-                require_message_authenticator=server.require_message_authenticator,
-                require_eap_message_authenticator=server.require_eap_message_authenticator,
-            )
+        if pkt is None:
+            raise ValueError("Missing packet to reply to")
+        reply = pkt.create_reply(**attributes)
+        self._router.prepare_reply(pkt, reply)
         # Carry the request's dedup key forward so DatagramProtocolServer.
         # send_response can cache the encoded bytes.
-        request_key = getattr(request, "_dedup_key", None)
-        if request_key is not None:
-            reply._dedup_key = request_key  # type: ignore[attr-defined]
+        self._router.attach_dedup_key(pkt, reply)
         return reply
 
     @abstractmethod

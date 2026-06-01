@@ -14,10 +14,7 @@ from pyrad2 import dedup, host, packet
 from pyrad2.dictionary import Dictionary
 from pyrad2.exceptions import ServerPacketError
 from pyrad2.constants import PacketType
-
-_ACCESS_REPLY_CODES = frozenset(
-    {PacketType.AccessAccept, PacketType.AccessReject, PacketType.AccessChallenge}
-)
+from pyrad2.router import RequestRouter
 
 
 @dataclass
@@ -130,18 +127,25 @@ class Server(host.Host):
         else:
             self._dedup_cache = None
 
+        # Shared transport-neutral dispatch helper. The async server owns
+        # its own RequestRouter instance with the same fields, so the
+        # two transports can't drift apart on policy.
+        self._router = RequestRouter(
+            hosts=self.hosts,
+            dictionary=self.dict,
+            enable_pkt_verify=self.enable_pkt_verify,
+            require_message_authenticator=self.require_message_authenticator,
+            require_eap_message_authenticator=self.require_eap_message_authenticator,
+            dedup_cache=self._dedup_cache,
+        )
+
         if addresses:
             for addr in addresses:
                 self.bind_to_address(addr)
 
     def _validate_message_authenticator_policy(self, pkt: packet.Packet) -> None:
         """Validate incoming Message-Authenticator policy for a packet."""
-        if not isinstance(pkt, packet.Packet):
-            return
-        pkt.validate_message_authenticator_policy(
-            require_message_authenticator=self.require_message_authenticator,
-            require_eap_message_authenticator=self.require_eap_message_authenticator,
-        )
+        self._router.validate_message_authenticator_policy(pkt)
 
     def _send_status_response(self, pkt: packet.Packet, code: PacketType) -> None:
         """Reply to Status-Server without invoking normal request handlers."""
@@ -261,14 +265,14 @@ class Server(host.Host):
         duplicate, drops silently. Otherwise runs the handler and lets
         ``send_reply_packet`` populate the cache.
         """
-        key = dedup.key_for(pkt) if self._dedup_cache is not None else None
+        key = self._router.dedup_key_for(pkt)
         fd = getattr(pkt, "fd", None)
 
         def _resend(raw: bytes) -> None:
             if fd is not None:
                 fd.sendto(raw, pkt.source)
 
-        action = dedup.consult_cache(self._dedup_cache, key, _resend)
+        action = self._router.dedup_consult(key, _resend)
         if action is dedup.DispatchAction.DROP:
             logger.debug(
                 "Dropping duplicate in-flight request from {}", pkt.source
@@ -285,22 +289,11 @@ class Server(host.Host):
         try:
             handler(pkt)
         finally:
-            if key is not None and self._dedup_cache is not None:
-                # No-op if the handler already recorded a reply.
-                self._dedup_cache.drop_in_flight(key)
+            self._router.dedup_drop_in_flight(key)
 
     def _lookup_secret(self, addr: str) -> bytes:
-        """Return the shared secret for ``addr`` or raise ``ServerPacketError``.
-
-        Used at recvfrom time so unknown sources are dropped before any
-        attribute parsing runs, and so the packet is parsed with the
-        real secret (lets the authenticator MD5 check pass without a
-        second decode).
-        """
-        host = self.hosts.get(addr) or self.hosts.get("0.0.0.0")
-        if host is None:
-            raise ServerPacketError("Received packet from unknown host")
-        return host.secret
+        """Return the shared secret for ``addr`` or raise ``ServerPacketError``."""
+        return self._router.lookup_secret(addr)
 
     def _add_secret(self, pkt: packet.Packet) -> None:
         """Backwards-compatible shim: set ``pkt.secret`` from ``self.hosts``.
@@ -308,29 +301,11 @@ class Server(host.Host):
         Kept for subclasses that override or call it directly. ``_grab_packet``
         now seeds the secret during decode, so this is usually a no-op.
         """
-        pkt.secret = self._lookup_secret(pkt.source[0])
+        pkt.secret = self._router.lookup_secret(pkt.source[0])
 
     def _verify_request_authenticator(self, pkt: packet.Packet) -> None:
-        """Run the per-code Request Authenticator check before dispatch.
-
-        Mirrors ``ServerAsync`` so the sync path doesn't pass un-verified
-        traffic to user handlers. Trivial-mock packets (no Packet base)
-        short-circuit so existing unit tests keep working.
-        """
-        if not self.enable_pkt_verify:
-            return
-        if not isinstance(pkt, packet.Packet):
-            return
-        if pkt.code == PacketType.AccessRequest:
-            if not isinstance(pkt, packet.AuthPacket) or not pkt.verify_auth_request():
-                raise packet.PacketError("Packet verification failed")
-        elif pkt.code in (
-            PacketType.AccountingRequest,
-            PacketType.CoARequest,
-            PacketType.DisconnectRequest,
-        ):
-            if not pkt.verify_packet():
-                raise packet.PacketError("Packet verification failed")
+        """Run the per-code Request Authenticator check before dispatch."""
+        self._router.verify_request(pkt)
 
     def _handle_auth_packet(self, pkt: packet.Packet) -> None:
         """Process a packet received on the authentication port.
@@ -410,8 +385,8 @@ class Server(host.Host):
             packet.Packet: RADIUS packet
         """
         (data, source) = fd.recvfrom(self.MAX_PACKET_SIZE)
-        secret = self._lookup_secret(source[0])
-        pkt = packet.parse_packet(data, secret, self.dict)
+        secret = self._router.lookup_secret(source[0])
+        pkt = self._router.parse(data, secret)
         pkt.source = source
         pkt.fd = fd
         return pkt
@@ -426,12 +401,14 @@ class Server(host.Host):
                 self._poll.register(
                     fd.fileno(), select.POLLIN | select.POLLPRI | select.POLLERR
                 )
+        # Membership-tested per packet in ``_process_input``; sets make
+        # that O(1) instead of an O(N) list scan.
         if self.auth_enabled:
-            self._realauthfds = list(map(lambda x: x.fileno(), self.authfds))
+            self._realauthfds = {x.fileno() for x in self.authfds}
         if self.acct_enabled:
-            self._realacctfds = list(map(lambda x: x.fileno(), self.acctfds))
+            self._realacctfds = {x.fileno() for x in self.acctfds}
         if self.coa_enabled:
-            self._realcoafds = list(map(lambda x: x.fileno(), self.coafds))
+            self._realcoafds = {x.fileno() for x in self.coafds}
 
     def create_reply_packet(self, pkt: packet.Packet, **attributes) -> packet.Packet:
         """Create a reply packet.
@@ -443,41 +420,21 @@ class Server(host.Host):
         """
         reply = pkt.create_reply(**attributes)
         reply.source = pkt.source
-        packet.prepare_reply_message_authenticator(
-            pkt,
-            reply,
-            require_message_authenticator=self.require_message_authenticator,
-            require_eap_message_authenticator=self.require_eap_message_authenticator,
-        )
+        self._router.prepare_reply(pkt, reply)
         # Carry the request's dedup key forward so send_reply_packet can
         # cache the resulting bytes without re-deriving the key.
-        request_key = getattr(pkt, "_dedup_key", None)
-        if request_key is not None:
-            reply._dedup_key = request_key  # type: ignore[attr-defined]
+        self._router.attach_dedup_key(pkt, reply)
         return reply
 
     def send_reply_packet(self, fd: socket.socket, pkt: packet.Packet) -> None:
         """Send a reply packet after applying Message-Authenticator policy."""
-        # BlastRADIUS mitigation only forces MA on Access replies; the
-        # other reply codes are already integrity-protected by their
-        # Response Authenticator MD5.
-        force_ma_for_access = (
-            self.require_message_authenticator
-            and isinstance(pkt, packet.Packet)
-            and pkt.code in _ACCESS_REPLY_CODES
-        )
-        if force_ma_for_access or (
-            self.require_eap_message_authenticator
-            and isinstance(pkt, packet.Packet)
-            and pkt.has_eap_message()
-        ):
-            pkt.ensure_message_authenticator()
+        self._router.force_reply_ma(pkt)
         # Encode once: we need the exact bytes for RFC 5080 replay so a
         # retransmission gets a byte-identical answer (which matters for
         # the EAP State attribute and the Message-Authenticator).
         raw = pkt.reply_packet()
         fd.sendto(raw, pkt.source)  # type: ignore[call-overload]
-        dedup.record_if_keyed(self._dedup_cache, pkt, raw)
+        self._router.record_reply(pkt, raw)
 
     def _process_input(self, fd: socket.socket) -> None:
         """Process available data.

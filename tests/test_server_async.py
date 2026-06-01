@@ -136,9 +136,15 @@ class ServerAsyncTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.server.auth_protocols, [])
 
     def test_create_reply_packet(self):
+        server = DummyServer()
         pkt = MagicMock()
-        ServerAsync.create_reply_packet(pkt, Attr1="value")
+        server.create_reply_packet(pkt, Attr1="value")
         pkt.create_reply.assert_called_once_with(Attr1="value")
+
+    def test_create_reply_packet_requires_packet(self):
+        server = DummyServer()
+        with self.assertRaisesRegex(ValueError, "Missing packet to reply to"):
+            server.create_reply_packet()
 
     def test_message_authenticator_policy_rejects_eap_without_ma(self):
         dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
