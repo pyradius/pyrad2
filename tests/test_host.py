@@ -1,62 +1,58 @@
-import unittest
 from pyrad2.host import Host
-from pyrad2.packet import Packet
-from pyrad2.packet import AuthPacket
-from pyrad2.packet import AcctPacket
-from pyrad2.packet import StatusPacket
+from pyrad2.packet import AcctPacket, AuthPacket, Packet, StatusPacket
 
 
-class ConstructionTests(unittest.TestCase):
-    def testSimpleConstruction(self):
+class TestHostConstruction:
+    def test_simple_construction(self):
         host = Host()
-        self.assertEqual(host.authport, 1812)
-        self.assertEqual(host.acctport, 1813)
+        assert host.authport == 1812
+        assert host.acctport == 1813
 
-    def testParameterOrder(self):
+    def test_parameter_order(self):
         host = Host(123, 456, 789, 101)
-        self.assertEqual(host.authport, 123)
-        self.assertEqual(host.acctport, 456)
-        self.assertEqual(host.coaport, 789)
-        self.assertEqual(host.dict, 101)
+        assert host.authport == 123
+        assert host.acctport == 456
+        assert host.coaport == 789
+        assert host.dict == 101
 
-    def testNamedParameters(self):
+    def test_named_parameters(self):
         host = Host(authport=123, acctport=456, coaport=789, dict=101)
-        self.assertEqual(host.authport, 123)
-        self.assertEqual(host.acctport, 456)
-        self.assertEqual(host.coaport, 789)
-        self.assertEqual(host.dict, 101)
+        assert host.authport == 123
+        assert host.acctport == 456
+        assert host.coaport == 789
+        assert host.dict == 101
 
 
-class PacketCreationTests(unittest.TestCase):
-    def setUp(self):
+class TestPacketCreation:
+    def setup_method(self):
         self.host = Host()
 
-    def testCreatePacket(self):
+    def test_create_packet(self):
         packet = self.host.create_packet(id=15)
-        self.assertTrue(isinstance(packet, Packet))
-        self.assertTrue(packet.dict is self.host.dict)
-        self.assertEqual(packet.id, 15)
+        assert isinstance(packet, Packet)
+        assert packet.dict is self.host.dict
+        assert packet.id == 15
 
-    def testCreateAuthPacket(self):
+    def test_create_auth_packet(self):
         packet = self.host.create_auth_packet(id=15)
-        self.assertTrue(isinstance(packet, AuthPacket))
-        self.assertTrue(packet.dict is self.host.dict)
-        self.assertEqual(packet.id, 15)
+        assert isinstance(packet, AuthPacket)
+        assert packet.dict is self.host.dict
+        assert packet.id == 15
 
-    def testCreateAcctPacket(self):
+    def test_create_acct_packet(self):
         packet = self.host.create_acct_packet(id=15)
-        self.assertTrue(isinstance(packet, AcctPacket))
-        self.assertTrue(packet.dict is self.host.dict)
-        self.assertEqual(packet.id, 15)
+        assert isinstance(packet, AcctPacket)
+        assert packet.dict is self.host.dict
+        assert packet.id == 15
 
-    def testCreateStatusPacket(self):
+    def test_create_status_packet(self):
         packet = self.host.create_status_packet(id=15)
-        self.assertTrue(isinstance(packet, StatusPacket))
-        self.assertTrue(packet.dict is self.host.dict)
-        self.assertEqual(packet.id, 15)
+        assert isinstance(packet, StatusPacket)
+        assert packet.dict is self.host.dict
+        assert packet.id == 15
 
 
-class MockPacket:
+class _MockPacket:
     packet = object()
     replypacket = object()
     source = object()
@@ -68,7 +64,7 @@ class MockPacket:
         return self.replypacket
 
 
-class MockFd:
+class _MockFd:
     data = None
     target = None
 
@@ -77,18 +73,18 @@ class MockFd:
         self.target = target
 
 
-class PacketSendTest(unittest.TestCase):
-    def setUp(self):
+class TestPacketSend:
+    def setup_method(self):
         self.host = Host()
-        self.fd = MockFd()
-        self.packet = MockPacket()
+        self.fd = _MockFd()
+        self.packet = _MockPacket()
 
-    def testSendPacket(self):
+    def test_send_packet(self):
         self.host.send_packet(self.fd, self.packet)
-        self.assertTrue(self.fd.data is self.packet.packet)
-        self.assertTrue(self.fd.target is self.packet.source)
+        assert self.fd.data is self.packet.packet
+        assert self.fd.target is self.packet.source
 
-    def testSendReplyPacket(self):
+    def test_send_reply_packet(self):
         self.host.send_reply_packet(self.fd, self.packet)
-        self.assertTrue(self.fd.data is self.packet.replypacket)
-        self.assertTrue(self.fd.target is self.packet.source)
+        assert self.fd.data is self.packet.replypacket
+        assert self.fd.target is self.packet.source

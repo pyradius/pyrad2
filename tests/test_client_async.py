@@ -8,14 +8,17 @@ directly rather than relying on wall-clock sleeps.
 
 import asyncio
 import os
-import unittest
+import threading
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from pyrad2 import client_async, packet
 from pyrad2.client_async import ClientAsync, DatagramProtocolClient
 from pyrad2.constants import PacketType
 from pyrad2.dictionary import Dictionary
+from pyrad2.exceptions import IdentifierExhausted
 from pyrad2.packet import AcctPacket, AuthPacket, CoAPacket, StatusPacket
 
 from .base import TEST_ROOT_PATH
@@ -68,7 +71,7 @@ def _make_request(proto: DatagramProtocolClient, *, packet_id=42, send_date=None
     return pkt, fut
 
 
-class TimeoutHandlerTests(unittest.TestCase):
+class TestTimeoutHandler:
     """Retry loop semantics — regression coverage for the two historical bugs."""
 
     def test_retry_uses_request_packet_lowercase(self):
@@ -94,12 +97,12 @@ class TimeoutHandlerTests(unittest.TestCase):
         pkt, fut = _run(scenario())
 
         # request_packet() must have been called (sendto invoked) on retry.
-        self.assertTrue(pkt.request_packet.called)
+        assert pkt.request_packet.called
         # The non-existent PascalCase name must NOT be invoked.
-        self.assertFalse(hasattr(pkt, "RequestPacket") and pkt.RequestPacket.called)
+        assert not (hasattr(pkt, "RequestPacket") and pkt.RequestPacket.called)
         # Future ends in TimeoutError once retries are exhausted.
-        self.assertTrue(fut.done())
-        self.assertIsInstance(fut.exception(), TimeoutError)
+        assert fut.done()
+        assert isinstance(fut.exception(), TimeoutError)
 
     def test_recent_send_does_not_premature_timeout(self):
         """Regression: (send_date - now).seconds wraparound used to fire instantly."""
@@ -128,9 +131,9 @@ class TimeoutHandlerTests(unittest.TestCase):
         pkt, fut, proto = _run(scenario())
 
         # No retry should have fired and the future must still be pending.
-        self.assertFalse(pkt.request_packet.called)
-        self.assertFalse(fut.done())
-        self.assertEqual(proto.pending_requests[42]["retries"], 0)
+        assert not pkt.request_packet.called
+        assert not fut.done()
+        assert proto.pending_requests[42]["retries"] == 0
 
     def test_retries_then_timeout(self):
         """After ``retries`` resends, the future surfaces TimeoutError."""
@@ -159,10 +162,10 @@ class TimeoutHandlerTests(unittest.TestCase):
 
         # request_packet called once per retry (initial send is done by
         # send_packet, which we bypass here).
-        self.assertEqual(pkt.request_packet.call_count, 2)
-        self.assertIsInstance(fut.exception(), TimeoutError)
+        assert pkt.request_packet.call_count == 2
+        assert isinstance(fut.exception(), TimeoutError)
         # Pending entry cleaned up.
-        self.assertNotIn(42, proto.pending_requests)
+        assert 42 not in proto.pending_requests
 
     def test_next_wake_up_tracks_remaining_time(self):
         """The chosen sleep duration must be remaining-time, not elapsed-time."""
@@ -188,14 +191,14 @@ class TimeoutHandlerTests(unittest.TestCase):
 
         _run(scenario())
 
-        self.assertEqual(len(sleeps), 1)
+        assert len(sleeps) == 1
         # Should be remaining ≈ 5s, never the elapsed ≈ 5s by coincidence —
         # but importantly never close to 10 (full timeout) or 0.
-        self.assertGreater(sleeps[0], 4.0)
-        self.assertLess(sleeps[0], 6.0)
+        assert sleeps[0] > 4.0
+        assert sleeps[0] < 6.0
 
 
-class DatagramReceivedTests(unittest.TestCase):
+class TestDatagramReceived:
     """Reply-handling path."""
 
     def test_invalid_reply_does_not_resolve_future(self):
@@ -229,7 +232,7 @@ class DatagramReceivedTests(unittest.TestCase):
             return fut
 
         fut = _run(scenario())
-        self.assertFalse(fut.done())
+        assert not fut.done()
 
     def test_valid_reply_resolves_future(self):
         async def scenario():
@@ -262,16 +265,18 @@ class DatagramReceivedTests(unittest.TestCase):
             return fut, proto
 
         fut, proto = _run(scenario())
-        self.assertTrue(fut.done())
+        assert fut.done()
         # Pending entry must be cleaned up after a valid reply.
-        self.assertNotIn(9, proto.pending_requests)
+        assert 9 not in proto.pending_requests
 
 
-class EapMd5AsyncTests(unittest.TestCase):
+class TestEapMd5Async:
     """EAP-MD5 challenge/response feature parity with the sync client."""
 
-    def setUp(self):
-        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
+    def setup_method(self):
+        self.dictionary = Dictionary(
+            os.path.join(TEST_ROOT_PATH, "dicts/dictionary")
+        )
 
     def _make_client(self) -> ClientAsync:
         client = ClientAsync(
@@ -313,15 +318,15 @@ class EapMd5AsyncTests(unittest.TestCase):
         asyncio.run(_go())
         ans = ans_holder["fut"]
 
-        self.assertEqual(len(captured), 1)
+        assert len(captured) == 1
         # EAP-Message attribute (79) must now hold an EAP-Identity Response.
-        self.assertIn(79, pkt)
+        assert 79 in pkt
         eap_msg = pkt[79][0]
         # Byte 0 is EAP code (2 = Response), byte 4 is EAP type (1 = Identity).
-        self.assertEqual(eap_msg[0], 2)
-        self.assertEqual(eap_msg[4], 1)
+        assert eap_msg[0] == 2
+        assert eap_msg[4] == 1
         # Outer future is still pending until the transport answers.
-        self.assertFalse(ans.done())
+        assert not ans.done()
 
     def test_access_challenge_triggers_md5_response(self):
         client = self._make_client()
@@ -369,16 +374,16 @@ class EapMd5AsyncTests(unittest.TestCase):
             await asyncio.sleep(0)
 
             # Second send must have been issued with the MD5 response payload.
-            self.assertEqual(len(sent), 2)
+            assert len(sent) == 2
             second = sent[1]
-            self.assertIn(79, second)
+            assert 79 in second
             eap_msg = second[79][0]
             # Second EAP code byte is Response (2) and type byte is MD5 (4).
-            self.assertEqual(eap_msg[0], 2)
-            self.assertEqual(eap_msg[1], 7)  # mirrors challenge EAP id
-            self.assertEqual(eap_msg[4], 4)
+            assert eap_msg[0] == 2
+            assert eap_msg[1] == 7  # mirrors challenge EAP id
+            assert eap_msg[4] == 4
             # State must be copied across the round-trip.
-            self.assertEqual(second[24], [b"opaque-state"])
+            assert second[24] == [b"opaque-state"]
 
             # Now resolve the second future with an Access-Accept.
             accept = AuthPacket(
@@ -390,8 +395,8 @@ class EapMd5AsyncTests(unittest.TestCase):
             captured_futures[1].set_result(accept)
             await asyncio.sleep(0)
 
-            self.assertTrue(ans.done())
-            self.assertIs(ans.result(), accept)
+            assert ans.done()
+            assert ans.result() is accept
 
         _run(scenario())
 
@@ -427,14 +432,14 @@ class EapMd5AsyncTests(unittest.TestCase):
             captured_futures[0].set_result(accept)
             await asyncio.sleep(0)
 
-            self.assertEqual(len(sent), 1)
-            self.assertTrue(ans.done())
-            self.assertIs(ans.result(), accept)
+            assert len(sent) == 1
+            assert ans.done()
+            assert ans.result() is accept
 
         _run(scenario())
 
 
-class SendPacketRoutingTests(unittest.TestCase):
+class TestSendPacketRouting:
     """send_packet must route packets to the matching transport.
 
     Regression guard: a CoAPacket sent without an initialized CoA
@@ -442,7 +447,7 @@ class SendPacketRoutingTests(unittest.TestCase):
     without an Acct transport similarly went to the wrong place.
     """
 
-    def setUp(self):
+    def setup_method(self):
         self.dictionary = Dictionary(
             os.path.join(TEST_ROOT_PATH, "dicts/dictionary")
         )
@@ -506,11 +511,11 @@ class SendPacketRoutingTests(unittest.TestCase):
         client.protocol_coa = None
         pkt = CoAPacket(id=1, secret=b"secret", dict=self.dictionary)
 
-        with self.assertRaises(Exception):
+        with pytest.raises(Exception):
             client.send_packet(pkt)
 
 
-class IdentifierAllocationTests(unittest.TestCase):
+class TestIdentifierAllocation:
     """Regression cover for H1/H10: per-transport id scan + typed exhaustion."""
 
     def test_create_id_skips_in_flight_slots(self):
@@ -520,7 +525,7 @@ class IdentifierAllocationTests(unittest.TestCase):
         proto.packet_id = 41
         proto.pending_requests[42] = {"placeholder": True}
 
-        self.assertEqual(proto.create_id(), 43)
+        assert proto.create_id() == 43
 
     def test_create_id_wraps_through_the_full_id_space(self):
         # Block every id except 7. The scan must wrap from 255 → 0
@@ -531,24 +536,20 @@ class IdentifierAllocationTests(unittest.TestCase):
             if i != 7:
                 proto.pending_requests[i] = {"placeholder": True}
 
-        self.assertEqual(proto.create_id(), 7)
+        assert proto.create_id() == 7
 
     def test_create_id_raises_identifier_exhausted_when_full(self):
-        from pyrad2.exceptions import IdentifierExhausted
-
         proto = _make_protocol()
         proto.packet_id = 0
         for i in range(256):
             proto.pending_requests[i] = {"placeholder": True}
 
-        with self.assertRaises(IdentifierExhausted):
+        with pytest.raises(IdentifierExhausted):
             proto.create_id()
 
     def test_send_packet_raises_identifier_exhausted_on_collision(self):
         # Previously raised a bare ``Exception``; callers couldn't tell the
         # exhaustion case apart from a transport failure. Now typed.
-        from pyrad2.exceptions import IdentifierExhausted
-
         proto = _make_protocol()
         proto.pending_requests[7] = {"placeholder": True}
 
@@ -556,11 +557,11 @@ class IdentifierAllocationTests(unittest.TestCase):
         pkt.id = 7
         pkt.request_packet.return_value = b"raw"
 
-        with self.assertRaises(IdentifierExhausted):
+        with pytest.raises(IdentifierExhausted):
             proto.send_packet(pkt, MagicMock())
 
 
-class ModuleLevelCurrentIdThreadSafetyTests(unittest.TestCase):
+class TestModuleLevelCurrentIdThreadSafety:
     """The module-level ``packet.create_id`` is the back-compat path for
     callers constructing ``Packet`` instances without a transport. It now
     serializes its increment so two threads can't read+write the same
@@ -568,7 +569,6 @@ class ModuleLevelCurrentIdThreadSafetyTests(unittest.TestCase):
     """
 
     def test_create_id_under_thread_contention_produces_unique_increments(self):
-        import threading
         from pyrad2 import packet as packet_mod
 
         # 256 concurrent callers, each requesting one id. Under a working
@@ -599,11 +599,9 @@ class ModuleLevelCurrentIdThreadSafetyTests(unittest.TestCase):
         for t in threads:
             t.join()
 
-        self.assertEqual(len(produced), thread_count)
-        self.assertEqual(
-            sorted(produced),
-            list(range(thread_count)),
-            "lock must serialize the increment so every id is unique",
+        assert len(produced) == thread_count
+        assert sorted(produced) == list(range(thread_count)), (
+            "lock must serialize the increment so every id is unique"
         )
 
 

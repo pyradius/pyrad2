@@ -2,7 +2,8 @@ import asyncio
 import os
 import ssl
 import struct
-import unittest
+
+import pytest
 
 from pyrad2.constants import ErrorCause, PacketType
 from pyrad2.dictionary import Dictionary
@@ -152,27 +153,27 @@ def raw_radius_response(id=1):
     return struct.pack("!BBH16s", PacketType.AccessAccept, id, 20, b"\x00" * 16)
 
 
-class RemoteHostTests(unittest.TestCase):
+class TestRemoteHost:
     def test_simple_construction(self):
         host = RemoteHost(
             "127.0.0.1",
             b"radsec",
             "name",
         )
-        self.assertEqual(host.name, "name")
-        self.assertEqual(host.address, "127.0.0.1")
-        self.assertEqual(host.secret, b"radsec")
+        assert host.name == "name"
+        assert host.address == "127.0.0.1"
+        assert host.secret == b"radsec"
 
 
-class ExampleCertificateTests(unittest.TestCase):
+class TestExampleCertificate:
     def test_example_server_certificate_matches_local_development_hosts(self):
         cert = ssl._ssl._test_decode_cert(EXAMPLE_SERVER_CERTFILE)
         subject_alt_names = set(cert["subjectAltName"])
 
-        self.assertIn(("DNS", "localhost"), subject_alt_names)
-        self.assertIn(("DNS", "radsec-server"), subject_alt_names)
-        self.assertIn(("IP Address", "127.0.0.1"), subject_alt_names)
-        self.assertIn(("IP Address", "0:0:0:0:0:0:0:1"), subject_alt_names)
+        assert ("DNS", "localhost") in subject_alt_names
+        assert ("DNS", "radsec-server") in subject_alt_names
+        assert ("IP Address", "127.0.0.1") in subject_alt_names
+        assert ("IP Address", "0:0:0:0:0:0:0:1") in subject_alt_names
 
 
 class RadSecServer(BaseRadSecServer):
@@ -222,9 +223,11 @@ class AuthAcctOnlyRadSecServer(BaseRadSecServer):
         return packet.create_reply()
 
 
-class ServerTests(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
-        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
+class TestServer:
+    def setup_method(self):
+        self.dictionary = Dictionary(
+            os.path.join(TEST_ROOT_PATH, "dicts/dictionary")
+        )
 
         # require_message_authenticator=False / enforce_ma=False keep the
         # legacy test fixtures (which build plain Access-Requests without a
@@ -250,17 +253,17 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         )
 
     def test_simple_construction(self):
-        self.assertEqual(self.server.listen_address, "0.0.0.0")
-        self.assertEqual(self.server.listen_port, 2083)
-        self.assertEqual(self.server.hosts, {"127.0.0.1": TEST_HOST})
-        self.assertEqual(self.server.dict, self.dictionary)
-        self.assertEqual(self.server.verify_packet, False)
-        self.assertTrue(self.server.enable_coa)
-        self.assertTrue(self.server.enable_disconnect)
-        self.assertEqual(self.server.ssl_ctx.verify_mode, ssl.CERT_REQUIRED)
-        self.assertEqual(
-            self.server.ssl_ctx.minimum_version,
-            BaseRadSecServer.DEFAULT_MINIMUM_TLS_VERSION,
+        assert self.server.listen_address == "0.0.0.0"
+        assert self.server.listen_port == 2083
+        assert self.server.hosts == {"127.0.0.1": TEST_HOST}
+        assert self.server.dict == self.dictionary
+        assert self.server.verify_packet is False
+        assert self.server.enable_coa
+        assert self.server.enable_disconnect
+        assert self.server.ssl_ctx.verify_mode == ssl.CERT_REQUIRED
+        assert (
+            self.server.ssl_ctx.minimum_version
+            == BaseRadSecServer.DEFAULT_MINIMUM_TLS_VERSION
         )
 
     def test_auth_acct_only_subclass_is_concrete(self):
@@ -271,14 +274,14 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             dictionary=self.dictionary,
         )
 
-        self.assertIsInstance(server, BaseRadSecServer)
+        assert isinstance(server, BaseRadSecServer)
 
     def test_client_uses_secure_tls_defaults(self):
-        self.assertTrue(self.client.ssl_ctx.check_hostname)
-        self.assertEqual(self.client.ssl_ctx.verify_mode, ssl.CERT_REQUIRED)
-        self.assertEqual(
-            self.client.ssl_ctx.minimum_version,
-            RadSecClient.DEFAULT_MINIMUM_TLS_VERSION,
+        assert self.client.ssl_ctx.check_hostname
+        assert self.client.ssl_ctx.verify_mode == ssl.CERT_REQUIRED
+        assert (
+            self.client.ssl_ctx.minimum_version
+            == RadSecClient.DEFAULT_MINIMUM_TLS_VERSION
         )
 
     def test_default_minimum_tls_version_is_1_3(self):
@@ -286,12 +289,10 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         # as legacy; RFC 9750 mandates 1.3 for RADIUS/1.1. Both sides
         # must default to TLS 1.3 so a fresh install doesn't accept the
         # weaker handshake without an explicit opt-down.
-        self.assertEqual(
-            BaseRadSecServer.DEFAULT_MINIMUM_TLS_VERSION, ssl.TLSVersion.TLSv1_3
+        assert (
+            BaseRadSecServer.DEFAULT_MINIMUM_TLS_VERSION == ssl.TLSVersion.TLSv1_3
         )
-        self.assertEqual(
-            RadSecClient.DEFAULT_MINIMUM_TLS_VERSION, ssl.TLSVersion.TLSv1_3
-        )
+        assert RadSecClient.DEFAULT_MINIMUM_TLS_VERSION == ssl.TLSVersion.TLSv1_3
 
     def test_legacy_tls_1_2_is_still_reachable_with_explicit_opt_out(self):
         # Operators bridging a legacy peer must still be able to pin the
@@ -303,7 +304,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             dictionary=self.dictionary,
             minimum_tls_version=ssl.TLSVersion.TLSv1_2,
         )
-        self.assertEqual(server.ssl_ctx.minimum_version, ssl.TLSVersion.TLSv1_2)
+        assert server.ssl_ctx.minimum_version == ssl.TLSVersion.TLSv1_2
         client = RadSecClient(
             server="127.0.0.1",
             secret=b"radsec",
@@ -313,7 +314,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             certfile_server=CA_CERTFILE,
             minimum_tls_version=ssl.TLSVersion.TLSv1_2,
         )
-        self.assertEqual(client.ssl_ctx.minimum_version, ssl.TLSVersion.TLSv1_2)
+        assert client.ssl_ctx.minimum_version == ssl.TLSVersion.TLSv1_2
 
     def test_client_can_disable_hostname_validation_explicitly(self):
         client = RadSecClient(
@@ -326,7 +327,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             check_hostname=False,
         )
 
-        self.assertFalse(client.ssl_ctx.check_hostname)
+        assert not client.ssl_ctx.check_hostname
 
     def test_server_fingerprint_allowlist_accepts_known_client_certificate(self):
         fingerprint = load_cert_fingerprint(CLIENT_CERTFILE)
@@ -338,9 +339,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             allowed_client_fingerprints={fingerprint},
         )
 
-        self.assertTrue(
-            server._verify_client_fingerprint(load_der_cert(CLIENT_CERTFILE))
-        )
+        assert server._verify_client_fingerprint(load_der_cert(CLIENT_CERTFILE))
 
     def test_server_fingerprint_allowlist_rejects_unknown_client_certificate(self):
         fingerprint = load_cert_fingerprint(SERVER_CERTFILE)
@@ -352,10 +351,8 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             allowed_client_fingerprints={fingerprint},
         )
 
-        self.assertFalse(
-            server._verify_client_fingerprint(load_der_cert(CLIENT_CERTFILE))
-        )
-        self.assertFalse(server._verify_client_fingerprint(None))
+        assert not server._verify_client_fingerprint(load_der_cert(CLIENT_CERTFILE))
+        assert not server._verify_client_fingerprint(None)
 
     def test_client_fingerprint_allowlist_accepts_known_server_certificate(self):
         fingerprint = load_cert_fingerprint(SERVER_CERTFILE)
@@ -369,8 +366,8 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             allowed_server_fingerprints={fingerprint},
         )
 
-        self.assertTrue(
-            client._verify_server_fingerprint(FakeWriter(load_der_cert(SERVER_CERTFILE)))
+        assert client._verify_server_fingerprint(
+            FakeWriter(load_der_cert(SERVER_CERTFILE))
         )
 
     def test_client_fingerprint_allowlist_rejects_unknown_server_certificate(self):
@@ -385,12 +382,12 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             allowed_server_fingerprints={fingerprint},
         )
 
-        self.assertFalse(
-            client._verify_server_fingerprint(FakeWriter(load_der_cert(SERVER_CERTFILE)))
+        assert not client._verify_server_fingerprint(
+            FakeWriter(load_der_cert(SERVER_CERTFILE))
         )
 
     async def test_unknown_host(self):
-        with self.assertRaises(UnknownHost):
+        with pytest.raises(UnknownHost):
             await self.server.packet_received({}, "4.4.4.4")
 
     async def test_verify_packet_dispatches_auth_request_verifier(self):
@@ -408,7 +405,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
 
         reply = await server.packet_received(request.request_packet(), "127.0.0.1")
 
-        self.assertEqual(reply.code, PacketType.AccessAccept)
+        assert reply.code == PacketType.AccessAccept
 
     async def test_verify_packet_dispatches_accounting_request_verifier(self):
         server = RadSecServer(
@@ -425,7 +422,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
 
         reply = await server.packet_received(request.request_packet(), "127.0.0.1")
 
-        self.assertEqual(reply.code, PacketType.AccountingResponse)
+        assert reply.code == PacketType.AccountingResponse
 
     async def test_verify_packet_rejects_invalid_accounting_authenticator(self):
         server = RadSecServer(
@@ -442,7 +439,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         data = bytearray(request.request_packet())
         data[-1] ^= 0xFF
 
-        with self.assertRaises(PacketError):
+        with pytest.raises(PacketError):
             await server.packet_received(bytes(data), "127.0.0.1")
 
     async def test_message_authenticator_policy_rejects_eap_without_ma(self):
@@ -451,8 +448,10 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         )
         request[79] = [b"\x02\x01\x00\x05\x01"]
 
-        with self.assertRaisesRegex(PacketError, "EAP-Message requires"):
-            await self.server.packet_received(request.request_packet(), "127.0.0.1")
+        with pytest.raises(PacketError, match="EAP-Message requires"):
+            await self.server.packet_received(
+                request.request_packet(), "127.0.0.1"
+            )
 
     async def test_message_authenticator_policy_accepts_valid_ma(self):
         request = self.client.create_auth_packet(
@@ -461,22 +460,26 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         request[79] = [b"\x02\x01\x00\x05\x01"]
         request.add_message_authenticator()
 
-        reply = await self.server.packet_received(request.request_packet(), "127.0.0.1")
+        reply = await self.server.packet_received(
+            request.request_packet(), "127.0.0.1"
+        )
 
-        self.assertEqual(reply.code, PacketType.AccessAccept)
-        self.assertTrue(reply.has_message_authenticator())
+        assert reply.code == PacketType.AccessAccept
+        assert reply.has_message_authenticator()
 
     async def test_status_server_replies_without_handler_side_effects(self):
         async def fail_access_handler(packet):
-            self.fail("access handler called")
+            pytest.fail("access handler called")
 
         self.server.handle_access_request = fail_access_handler
         request = self.client.create_status_packet()
 
-        reply = await self.server.packet_received(request.request_packet(), "127.0.0.1")
+        reply = await self.server.packet_received(
+            request.request_packet(), "127.0.0.1"
+        )
 
-        self.assertEqual(reply.code, PacketType.AccessAccept)
-        self.assertTrue(reply.has_message_authenticator())
+        assert reply.code == PacketType.AccessAccept
+        assert reply.has_message_authenticator()
 
     async def test_status_server_requires_message_authenticator(self):
         request = self.client.create_status_packet()
@@ -489,7 +492,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             request.authenticator,
         )
 
-        with self.assertRaisesRegex(PacketError, "Status-Server requires"):
+        with pytest.raises(PacketError, match="Status-Server requires"):
             await self.server.packet_received(raw, "127.0.0.1")
 
     async def test_handle_client_reads_multiple_packets_from_one_stream(self):
@@ -506,13 +509,15 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         request2 = self.client.create_auth_packet(
             code=PacketType.AccessRequest, User_Name="two"
         )
-        reader = FakeRadSecReader(request1.request_packet(), request2.request_packet())
+        reader = FakeRadSecReader(
+            request1.request_packet(), request2.request_packet()
+        )
         writer = FakeRadSecWriter(peername=("127.0.0.1", 44000))
 
         await server._handle_client(reader, writer)
 
-        self.assertEqual(len(writer.writes), 2)
-        self.assertTrue(writer.closed)
+        assert len(writer.writes) == 2
+        assert writer.closed
 
     async def test_handle_client_closes_after_max_packets(self):
         server = RadSecServer(
@@ -529,7 +534,9 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         request2 = self.client.create_auth_packet(
             code=PacketType.AccessRequest, User_Name="two"
         )
-        reader = FakeRadSecReader(request1.request_packet(), request2.request_packet())
+        reader = FakeRadSecReader(
+            request1.request_packet(), request2.request_packet()
+        )
         writer = FakeRadSecWriter(peername=("127.0.0.1", 44001))
 
         await server._handle_client(reader, writer)
@@ -537,8 +544,8 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         # The limit must close the connection after the first packet — the
         # second request is never serviced even though the reader has it
         # queued.
-        self.assertEqual(len(writer.writes), 1)
-        self.assertTrue(writer.closed)
+        assert len(writer.writes) == 1
+        assert writer.closed
 
     async def test_handle_client_closes_on_read_timeout(self):
         server = RadSecServer(
@@ -555,8 +562,8 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
 
         await server._handle_client(reader, writer)
 
-        self.assertEqual(writer.writes, [])
-        self.assertTrue(writer.closed)
+        assert writer.writes == []
+        assert writer.closed
 
     async def test_default_coa_handler_returns_nak(self):
         server = AuthAcctOnlyRadSecServer(
@@ -570,10 +577,8 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
 
         reply = await server.packet_received(request.request_packet(), "127.0.0.1")
 
-        self.assertEqual(reply.code, PacketType.CoANAK)
-        self.assertEqual(
-            int.from_bytes(reply[101][0], "big"), ErrorCause.UnsupportedExtension
-        )
+        assert reply.code == PacketType.CoANAK
+        assert int.from_bytes(reply[101][0], "big") == ErrorCause.UnsupportedExtension
 
     async def test_default_disconnect_handler_returns_nak(self):
         server = AuthAcctOnlyRadSecServer(
@@ -587,22 +592,22 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
 
         reply = await server.packet_received(request.request_packet(), "127.0.0.1")
 
-        self.assertEqual(reply.code, PacketType.DisconnectNAK)
-        self.assertEqual(
-            int.from_bytes(reply[101][0], "big"), ErrorCause.UnsupportedExtension
-        )
+        assert reply.code == PacketType.DisconnectNAK
+        assert int.from_bytes(reply[101][0], "big") == ErrorCause.UnsupportedExtension
 
     async def test_disabled_coa_returns_nak_without_handler(self):
         self.server.enable_coa = False
         request = self.client.create_coa_packet(code=PacketType.CoARequest)
 
-        reply = await self.server.packet_received(request.request_packet(), "127.0.0.1")
+        reply = await self.server.packet_received(
+            request.request_packet(), "127.0.0.1"
+        )
 
-        self.assertEqual(reply.code, PacketType.CoANAK)
+        assert reply.code == PacketType.CoANAK
 
 
-class RadSecClientConnectionTests(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
+class TestRadSecClientConnection:
+    def setup_method(self):
         self.client = RadSecClient(
             server="127.0.0.1",
             secret=b"radsec",
@@ -614,7 +619,9 @@ class RadSecClientConnectionTests(unittest.IsolatedAsyncioTestCase):
             reconnect_backoff=0,
         )
 
-    async def asyncTearDown(self):
+    @pytest.fixture(autouse=True)
+    async def _close_client(self):
+        yield
         await self.client.close()
 
     async def test_send_packet_reuses_connection_by_default(self):
@@ -631,11 +638,11 @@ class RadSecClientConnectionTests(unittest.IsolatedAsyncioTestCase):
         reply1 = await self.client._send_packet(FakeRadSecPacket(id=1))
         reply2 = await self.client._send_packet(FakeRadSecPacket(id=2))
 
-        self.assertIsNotNone(reply1)
-        self.assertIsNotNone(reply2)
-        self.assertEqual(len(connections), 1)
-        self.assertEqual(writer.writes, [b"request-1", b"request-2"])
-        self.assertFalse(writer.closed)
+        assert reply1 is not None
+        assert reply2 is not None
+        assert len(connections) == 1
+        assert writer.writes == [b"request-1", b"request-2"]
+        assert not writer.closed
 
     async def test_send_packet_can_disable_connection_reuse(self):
         self.client.reuse_connection = False
@@ -644,15 +651,18 @@ class RadSecClientConnectionTests(unittest.IsolatedAsyncioTestCase):
         async def open_connection():
             writer = FakeRadSecWriter()
             connections.append(writer)
-            return FakeRadSecReader(raw_radius_response(len(connections))), writer
+            return (
+                FakeRadSecReader(raw_radius_response(len(connections))),
+                writer,
+            )
 
         self.client._open_connection = open_connection
 
         await self.client._send_packet(FakeRadSecPacket(id=1))
         await self.client._send_packet(FakeRadSecPacket(id=2))
 
-        self.assertEqual(len(connections), 2)
-        self.assertTrue(all(writer.closed for writer in connections))
+        assert len(connections) == 2
+        assert all(writer.closed for writer in connections)
 
     async def test_send_packet_enforces_read_timeout(self):
         writer = FakeRadSecWriter()
@@ -665,8 +675,8 @@ class RadSecClientConnectionTests(unittest.IsolatedAsyncioTestCase):
 
         reply = await self.client._send_packet(FakeRadSecPacket())
 
-        self.assertIsNone(reply)
-        self.assertTrue(writer.closed)
+        assert reply is None
+        assert writer.closed
 
     async def test_send_packet_reconnects_after_stream_failure(self):
         connections = []
@@ -690,14 +700,14 @@ class RadSecClientConnectionTests(unittest.IsolatedAsyncioTestCase):
 
         reply = await self.client._send_packet(FakeRadSecPacket())
 
-        self.assertIsNotNone(reply)
-        self.assertEqual(len(connections), 2)
-        self.assertTrue(connections[0].closed)
+        assert reply is not None
+        assert len(connections) == 2
+        assert connections[0].closed
 
 
-class AuthPacketHandlingTests(ServerTests):
-    def setUp(self):
-        super().setUp()
+class TestAuthPacketHandling(TestServer):
+    def setup_method(self):
+        super().setup_method()
         self.packet = self.create_auth_packet()
 
     def create_auth_packet(self):
@@ -715,12 +725,12 @@ class AuthPacketHandlingTests(ServerTests):
 
     async def test_handle_auth_packet(self):
         reply = await self.server.handle_access_request(self.packet)
-        self.assertEqual(reply.code, PacketType.AccessAccept)
+        assert reply.code == PacketType.AccessAccept
 
 
-class AcctPacketHandlingTests(ServerTests):
-    def setUp(self):
-        super().setUp()
+class TestAcctPacketHandling(TestServer):
+    def setup_method(self):
+        super().setup_method()
         self.packet = self.create_acct_packet()
 
     def create_acct_packet(self):
@@ -739,4 +749,4 @@ class AcctPacketHandlingTests(ServerTests):
 
     async def test_handle_acct_packet(self):
         reply = await self.server.handle_accounting(self.packet)
-        self.assertEqual(reply.code, PacketType.AccountingResponse)
+        assert reply.code == PacketType.AccountingResponse

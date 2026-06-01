@@ -1,89 +1,96 @@
+import os
 import select
 import socket
-import unittest
-import os
-from .mock import MockPacket
-from .mock import MockPoll
-from .mock import MockSocket
-from .base import TEST_ROOT_PATH
-from pyrad2.client import Client
-from pyrad2.dictionary import Dictionary
-from pyrad2.client import Timeout
-from pyrad2.packet import AuthPacket
-from pyrad2.packet import AcctPacket
-from pyrad2.packet import CoAPacket
-from pyrad2.packet import StatusPacket
+
+import pytest
+
+from pyrad2.client import Client, Timeout
 from pyrad2.constants import PacketType
+from pyrad2.dictionary import Dictionary
+from pyrad2.packet import AcctPacket, AuthPacket, CoAPacket, StatusPacket
+
+from .base import TEST_ROOT_PATH
+from .mock import MockPacket, MockPoll, MockSocket
 
 BIND_IP = "127.0.0.1"
 BIND_PORT = 53535
 
 
-class ConstructionTests(unittest.TestCase):
-    def setUp(self):
+class TestConstruction:
+    def setup_method(self):
         self.server = object()
 
-    def testSimpleConstruction(self):
+    def test_simple_construction(self):
         client = Client(self.server)
-        self.assertTrue(client.server is self.server)
-        self.assertEqual(client.authport, 1812)
-        self.assertEqual(client.acctport, 1813)
-        self.assertEqual(client.secret, b"")
-        self.assertEqual(client.retries, 3)
-        self.assertEqual(client.timeout, 5)
-        self.assertTrue(client.dict is None)
+        assert client.server is self.server
+        assert client.authport == 1812
+        assert client.acctport == 1813
+        assert client.secret == b""
+        assert client.retries == 3
+        assert client.timeout == 5
+        assert client.dict is None
 
-    def testParameterOrder(self):
+    def test_parameter_order(self):
         marker = object()
         client = Client(self.server, 123, 456, 789, "secret", marker)
-        self.assertTrue(client.server is self.server)
-        self.assertEqual(client.authport, 123)
-        self.assertEqual(client.acctport, 456)
-        self.assertEqual(client.coaport, 789)
-        self.assertEqual(client.secret, "secret")
-        self.assertTrue(client.dict is marker)
+        assert client.server is self.server
+        assert client.authport == 123
+        assert client.acctport == 456
+        assert client.coaport == 789
+        assert client.secret == "secret"
+        assert client.dict is marker
 
-    def testNamedParameters(self):
+    def test_named_parameters(self):
         marker = object()
         client = Client(
-            server=self.server, authport=123, acctport=456, secret="secret", dict=marker
+            server=self.server,
+            authport=123,
+            acctport=456,
+            secret="secret",
+            dict=marker,
         )
-        self.assertTrue(client.server is self.server)
-        self.assertEqual(client.authport, 123)
-        self.assertEqual(client.acctport, 456)
-        self.assertEqual(client.secret, "secret")
-        self.assertTrue(client.dict is marker)
+        assert client.server is self.server
+        assert client.authport == 123
+        assert client.acctport == 456
+        assert client.secret == "secret"
+        assert client.dict is marker
 
 
-class SocketTests(unittest.TestCase):
-    def setUp(self):
+class TestSocket:
+    def setup_method(self):
         self.server = object()
         self.client = Client(self.server)
-        self.orgsocket = socket.socket
+        self._orgsocket = socket.socket
         socket.socket = MockSocket
 
-    def tearDown(self):
-        socket.socket = self.orgsocket
+    def teardown_method(self):
+        socket.socket = self._orgsocket
+        # ``MockPoll.results`` is a class attribute; tests below assign to
+        # it and the original suite happened to be insulated by execution
+        # order. Clear it explicitly so we don't leak state into other
+        # files (e.g. ``test_server.py::TestServerRun`` would otherwise
+        # see ``(1, POLLIN)`` left over and KeyError on an empty fdmap).
+        MockPoll.results = []
 
-    def testReopen(self):
+    def test_reopen(self):
         self.client._socket_open()
         sock = self.client._socket
         self.client._socket_open()
-        self.assertTrue(sock is self.client._socket)
+        assert sock is self.client._socket
 
-    def testBind(self):
+    def test_bind(self):
         self.client.bind((BIND_IP, BIND_PORT))
-        self.assertEqual(self.client._socket.address, (BIND_IP, BIND_PORT))
-        self.assertEqual(
-            self.client._socket.options, [(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)]
-        )
+        assert self.client._socket.address == (BIND_IP, BIND_PORT)
+        assert self.client._socket.options == [
+            (socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        ]
 
-    def testBindClosesSocket(self):
+    def test_bind_closes_socket(self):
         s = MockSocket(socket.AF_INET, socket.SOCK_DGRAM)
         self.client._socket = s
         self.client._poll = MockPoll()
         self.client.bind((BIND_IP, BIND_PORT))
-        self.assertEqual(s.closed, True)
+        assert s.closed is True
 
     def test_send_packet(self):
         def MockSend(self, pkt, port):
@@ -93,80 +100,83 @@ class SocketTests(unittest.TestCase):
         _send_packet = Client._send_packet
         Client._send_packet = MockSend
 
-        self.client.send_packet(AuthPacket())
-        self.assertEqual(self.client._mock_port, self.client.authport)
+        try:
+            self.client.send_packet(AuthPacket())
+            assert self.client._mock_port == self.client.authport
 
-        self.client.send_packet(AcctPacket())
-        self.assertEqual(self.client._mock_port, self.client.acctport)
+            self.client.send_packet(AcctPacket())
+            assert self.client._mock_port == self.client.acctport
 
-        # CoA packets must route to the CoA port, not auth/acct.
-        self.client.send_packet(CoAPacket())
-        self.assertEqual(self.client._mock_port, self.client.coaport)
+            # CoA packets must route to the CoA port, not auth/acct.
+            self.client.send_packet(CoAPacket())
+            assert self.client._mock_port == self.client.coaport
 
-        # Status-Server packets default to the auth port via send_status_packet.
-        self.client.send_packet(StatusPacket())
-        self.assertEqual(self.client._mock_port, self.client.authport)
+            # Status-Server packets default to the auth port.
+            self.client.send_packet(StatusPacket())
+            assert self.client._mock_port == self.client.authport
+        finally:
+            Client._send_packet = _send_packet
 
-        Client._send_packet = _send_packet
-
-    def testNoRetries(self):
+    def test_no_retries(self):
         self.client.retries = 0
-        self.assertRaises(Timeout, self.client._send_packet, None, None)
+        with pytest.raises(Timeout):
+            self.client._send_packet(None, None)
 
-    def testSingleRetry(self):
+    def test_single_retry(self):
         self.client.retries = 1
         self.client.timeout = 0
         packet = MockPacket(PacketType.AccessRequest)
-        self.assertRaises(Timeout, self.client._send_packet, packet, 432)
-        self.assertEqual(
-            self.client._socket.output, [("request packet", (self.server, 432))]
-        )
+        with pytest.raises(Timeout):
+            self.client._send_packet(packet, 432)
+        assert self.client._socket.output == [("request packet", (self.server, 432))]
 
-    def testDoubleRetry(self):
+    def test_double_retry(self):
         self.client.retries = 2
         self.client.timeout = 0
         packet = MockPacket(PacketType.AccessRequest)
-        self.assertRaises(Timeout, self.client._send_packet, packet, 432)
-        self.assertEqual(
-            self.client._socket.output,
-            [
-                ("request packet", (self.server, 432)),
-                ("request packet", (self.server, 432)),
-            ],
-        )
+        with pytest.raises(Timeout):
+            self.client._send_packet(packet, 432)
+        assert self.client._socket.output == [
+            ("request packet", (self.server, 432)),
+            ("request packet", (self.server, 432)),
+        ]
 
-    def testAuthDelay(self):
+    def test_auth_delay(self):
         self.client.retries = 2
         self.client.timeout = 1
         self.client._socket = MockSocket(1, 2, b"valid reply")
         packet = MockPacket(PacketType.AccessRequest)
-        self.assertRaises(Timeout, self.client._send_packet, packet, 432)
-        self.assertFalse("Acct-Delay-Time" in packet)
+        with pytest.raises(Timeout):
+            self.client._send_packet(packet, 432)
+        assert "Acct-Delay-Time" not in packet
 
-    def testSingleAccountDelay(self):
+    def test_single_account_delay(self):
         self.client.retries = 2
         self.client.timeout = 1
         self.client._socket = MockSocket(1, 2, b"valid reply")
         packet = MockPacket(PacketType.AccountingRequest)
-        self.assertRaises(Timeout, self.client._send_packet, packet, 432)
-        self.assertEqual(packet["Acct-Delay-Time"], [1])
+        with pytest.raises(Timeout):
+            self.client._send_packet(packet, 432)
+        assert packet["Acct-Delay-Time"] == [1]
 
-    def testDoubleAccountDelay(self):
+    def test_double_account_delay(self):
         self.client.retries = 3
         self.client.timeout = 1
         self.client._socket = MockSocket(1, 2, b"valid reply")
         packet = MockPacket(PacketType.AccountingRequest)
-        self.assertRaises(Timeout, self.client._send_packet, packet, 432)
-        self.assertEqual(packet["Acct-Delay-Time"], [2])
+        with pytest.raises(Timeout):
+            self.client._send_packet(packet, 432)
+        assert packet["Acct-Delay-Time"] == [2]
 
-    def testIgnorePacketError(self):
+    def test_ignore_packet_error(self):
         self.client.retries = 1
         self.client.timeout = 1
         self.client._socket = MockSocket(1, 2, b"valid reply")
         packet = MockPacket(PacketType.AccountingRequest, verify=True, error=True)
-        self.assertRaises(Timeout, self.client._send_packet, packet, 432)
+        with pytest.raises(Timeout):
+            self.client._send_packet(packet, 432)
 
-    def testValidReply(self):
+    def test_valid_reply(self):
         self.client.retries = 1
         self.client.timeout = 1
         self.client._socket = MockSocket(1, 2, b"valid reply")
@@ -174,28 +184,29 @@ class SocketTests(unittest.TestCase):
         MockPoll.results = [(1, select.POLLIN)]
         packet = MockPacket(PacketType.AccountingRequest, verify=True)
         reply = self.client._send_packet(packet, 432)
-        self.assertTrue(reply is packet.reply)
+        assert reply is packet.reply
 
-    def testInvalidReply(self):
+    def test_invalid_reply(self):
         self.client.retries = 1
         self.client.timeout = 1
         self.client._socket = MockSocket(1, 2, b"invalid reply")
         MockPoll.results = [(1, select.POLLIN)]
         packet = MockPacket(PacketType.AccountingRequest, verify=False)
-        self.assertRaises(Timeout, self.client._send_packet, packet, 432)
+        with pytest.raises(Timeout):
+            self.client._send_packet(packet, 432)
 
 
-class OtherTests(unittest.TestCase):
-    def setUp(self):
+class TestOther:
+    def setup_method(self):
         self.server = object()
         self.client = Client(self.server, secret=b"zeer geheim")
 
     def test_auth_packet(self):
         packet = self.client.create_auth_packet(id=15)
-        self.assertTrue(isinstance(packet, AuthPacket))
-        self.assertTrue(packet.dict is self.client.dict)
-        self.assertEqual(packet.id, 15)
-        self.assertEqual(packet.secret, b"zeer geheim")
+        assert isinstance(packet, AuthPacket)
+        assert packet.dict is self.client.dict
+        assert packet.id == 15
+        assert packet.secret == b"zeer geheim"
 
     def test_prepare_outgoing_auth_packet_adds_ma_for_eap_message(self):
         dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
@@ -205,14 +216,14 @@ class OtherTests(unittest.TestCase):
 
         client._prepare_outgoing_packet(packet)
 
-        self.assertTrue(packet.has_message_authenticator())
+        assert packet.has_message_authenticator()
 
     def test_status_packet(self):
         packet = self.client.create_status_packet(id=15)
-        self.assertTrue(isinstance(packet, StatusPacket))
-        self.assertTrue(packet.dict is self.client.dict)
-        self.assertEqual(packet.id, 15)
-        self.assertEqual(packet.secret, b"zeer geheim")
+        assert isinstance(packet, StatusPacket)
+        assert packet.dict is self.client.dict
+        assert packet.id == 15
+        assert packet.secret == b"zeer geheim"
 
     def test_prepare_outgoing_status_packet_adds_ma(self):
         dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
@@ -221,11 +232,11 @@ class OtherTests(unittest.TestCase):
 
         client._prepare_outgoing_packet(packet)
 
-        self.assertTrue(packet.has_message_authenticator())
+        assert packet.has_message_authenticator()
 
     def test_create_acct_packet(self):
         packet = self.client.create_acct_packet(id=15)
-        self.assertTrue(isinstance(packet, AcctPacket))
-        self.assertTrue(packet.dict is self.client.dict)
-        self.assertEqual(packet.id, 15)
-        self.assertEqual(packet.secret, b"zeer geheim")
+        assert isinstance(packet, AcctPacket)
+        assert packet.dict is self.client.dict
+        assert packet.id == 15
+        assert packet.secret == b"zeer geheim"

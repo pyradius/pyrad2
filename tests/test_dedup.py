@@ -1,6 +1,7 @@
 import os
-import unittest
 from unittest.mock import MagicMock
+
+import pytest
 
 from pyrad2 import dedup, packet
 from pyrad2.constants import PacketType
@@ -24,18 +25,18 @@ def _make_auth_packet(dictionary, *, ident=1, authenticator=b"0123456789ABCDEF")
     return parsed
 
 
-class DedupKeyTests(unittest.TestCase):
-    def setUp(self):
+class TestDedupKey:
+    def setup_method(self):
         self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
 
     def test_key_for_real_request(self):
         pkt = _make_auth_packet(self.dictionary)
         key = dedup.key_for(pkt)
-        self.assertEqual(key.src_ip, "10.0.0.1")
-        self.assertEqual(key.src_port, 12345)
-        self.assertEqual(key.code, int(PacketType.AccessRequest))
-        self.assertEqual(key.identifier, 1)
-        self.assertEqual(key.request_authenticator, b"0123456789ABCDEF")
+        assert key.src_ip == "10.0.0.1"
+        assert key.src_port == 12345
+        assert key.code == int(PacketType.AccessRequest)
+        assert key.identifier == 1
+        assert key.request_authenticator == b"0123456789ABCDEF"
 
     def test_key_for_status_server_is_none(self):
         pkt = packet.StatusPacket(
@@ -45,17 +46,17 @@ class DedupKeyTests(unittest.TestCase):
             dict=self.dictionary,
         )
         pkt.source = ("10.0.0.1", 12345)
-        self.assertIsNone(dedup.key_for(pkt))
+        assert dedup.key_for(pkt) is None
 
     def test_key_for_missing_fields(self):
         class Stub:
             code = PacketType.AccessRequest
 
-        self.assertIsNone(dedup.key_for(Stub()))
+        assert dedup.key_for(Stub()) is None
 
 
-class ResponseCacheTests(unittest.TestCase):
-    def setUp(self):
+class TestResponseCache:
+    def setup_method(self):
         self.now = [1000.0]
         self.cache = dedup.ResponseCache(
             ttl=10.0, max_entries=3, clock=lambda: self.now[0]
@@ -63,20 +64,20 @@ class ResponseCacheTests(unittest.TestCase):
         self.key = dedup.DedupKey("10.0.0.1", 1, 1, 1, b"a" * 16)
 
     def test_miss(self):
-        self.assertIsNone(self.cache.lookup(self.key))
+        assert self.cache.lookup(self.key) is None
 
     def test_in_flight_then_cached(self):
         self.cache.mark_in_flight(self.key)
-        self.assertIs(self.cache.lookup(self.key), dedup.IN_FLIGHT)
+        assert self.cache.lookup(self.key) is dedup.IN_FLIGHT
         self.cache.record_reply(self.key, b"reply")
-        self.assertEqual(self.cache.lookup(self.key), b"reply")
+        assert self.cache.lookup(self.key) == b"reply"
 
     def test_ttl_expiry(self):
         self.cache.record_reply(self.key, b"reply")
         self.now[0] += 9.999
-        self.assertEqual(self.cache.lookup(self.key), b"reply")
+        assert self.cache.lookup(self.key) == b"reply"
         self.now[0] += 0.002
-        self.assertIsNone(self.cache.lookup(self.key))
+        assert self.cache.lookup(self.key) is None
 
     def test_lru_eviction(self):
         keys = [
@@ -85,17 +86,17 @@ class ResponseCacheTests(unittest.TestCase):
         for k in keys:
             self.cache.record_reply(k, b"r-%d" % k.src_port)
         # Cap is 3, so the two oldest were evicted.
-        self.assertEqual(len(self.cache), 3)
-        self.assertIsNone(self.cache.lookup(keys[0]))
-        self.assertIsNone(self.cache.lookup(keys[1]))
-        self.assertEqual(self.cache.lookup(keys[2]), b"r-2")
-        self.assertEqual(self.cache.lookup(keys[4]), b"r-4")
+        assert len(self.cache) == 3
+        assert self.cache.lookup(keys[0]) is None
+        assert self.cache.lookup(keys[1]) is None
+        assert self.cache.lookup(keys[2]) == b"r-2"
+        assert self.cache.lookup(keys[4]) == b"r-4"
 
     def test_drop_in_flight_is_idempotent_and_noop_after_record(self):
         self.cache.mark_in_flight(self.key)
         self.cache.record_reply(self.key, b"reply")
         self.cache.drop_in_flight(self.key)
-        self.assertEqual(self.cache.lookup(self.key), b"reply")
+        assert self.cache.lookup(self.key) == b"reply"
 
     def test_consult_cache_actions(self):
         resends = []
@@ -105,25 +106,25 @@ class ResponseCacheTests(unittest.TestCase):
 
         # Miss → PROCESS and marked in-flight.
         action = dedup.consult_cache(self.cache, self.key, resend)
-        self.assertIs(action, dedup.DispatchAction.PROCESS)
-        self.assertIs(self.cache.lookup(self.key), dedup.IN_FLIGHT)
+        assert action is dedup.DispatchAction.PROCESS
+        assert self.cache.lookup(self.key) is dedup.IN_FLIGHT
 
         # In-flight retry → DROP, no resend.
         action = dedup.consult_cache(self.cache, self.key, resend)
-        self.assertIs(action, dedup.DispatchAction.DROP)
-        self.assertEqual(resends, [])
+        assert action is dedup.DispatchAction.DROP
+        assert resends == []
 
         # After reply recorded, retry → RESENT with cached bytes.
         self.cache.record_reply(self.key, b"cached")
         action = dedup.consult_cache(self.cache, self.key, resend)
-        self.assertIs(action, dedup.DispatchAction.RESENT)
-        self.assertEqual(resends, [b"cached"])
+        assert action is dedup.DispatchAction.RESENT
+        assert resends == [b"cached"]
 
     def test_consult_cache_with_no_cache_is_passthrough(self):
         action = dedup.consult_cache(None, self.key, lambda _: None)
-        self.assertIs(action, dedup.DispatchAction.PROCESS)
+        assert action is dedup.DispatchAction.PROCESS
         action = dedup.consult_cache(self.cache, None, lambda _: None)
-        self.assertIs(action, dedup.DispatchAction.PROCESS)
+        assert action is dedup.DispatchAction.PROCESS
 
 
 class _CaptureFd:
@@ -154,8 +155,8 @@ class _CountingServer(Server):
         self.send_reply_packet(pkt.fd, reply)
 
 
-class SyncServerDedupTests(unittest.TestCase):
-    def setUp(self):
+class TestSyncServerDedup:
+    def setup_method(self):
         self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
         self.remote_host = RemoteHost("10.0.0.1", b"secret", "host")
 
@@ -185,9 +186,9 @@ class SyncServerDedupTests(unittest.TestCase):
         second.fd = first.fd
         server._handle_auth_packet(second)
 
-        self.assertEqual(server.call_count, 1)
-        self.assertEqual(len(first.fd.sent), 2)
-        self.assertEqual(first.fd.sent[0][0], first.fd.sent[1][0])
+        assert server.call_count == 1
+        assert len(first.fd.sent) == 2
+        assert first.fd.sent[0][0] == first.fd.sent[1][0]
 
     def test_different_authenticator_is_not_a_duplicate(self):
         server = self._server()
@@ -197,14 +198,14 @@ class SyncServerDedupTests(unittest.TestCase):
         second = self._make_parsed_packet(authenticator=b"B" * 16)
         server._handle_auth_packet(second)
 
-        self.assertEqual(server.call_count, 2)
+        assert server.call_count == 2
 
     def test_dedup_disabled_runs_handler_every_time(self):
         server = self._server(dedup_enabled=False)
         for _ in range(3):
             server._handle_auth_packet(self._make_parsed_packet())
-        self.assertEqual(server.call_count, 3)
-        self.assertIsNone(server._dedup_cache)
+        assert server.call_count == 3
+        assert server._dedup_cache is None
 
     def test_eap_state_is_preserved_across_retransmission(self):
         """RFC 5080: the cached reply must be byte-identical, so the EAP
@@ -223,12 +224,12 @@ class SyncServerDedupTests(unittest.TestCase):
         replay.fd = first.fd
         server._handle_auth_packet(replay)
 
-        self.assertEqual(server.call_count, 1)
-        self.assertEqual(first.fd.sent[0][0], first.fd.sent[1][0])
+        assert server.call_count == 1
+        assert first.fd.sent[0][0] == first.fd.sent[1][0]
 
 
-class AsyncServerDedupTests(unittest.TestCase):
-    def setUp(self):
+class TestAsyncServerDedup:
+    def setup_method(self):
         self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
         self.remote_host = RemoteHost("10.0.0.1", b"secret", "host")
 
@@ -278,9 +279,9 @@ class AsyncServerDedupTests(unittest.TestCase):
         protocol.datagram_received(data, addr)
         second_bytes = protocol.transport.sendto.call_args.args[0]
 
-        self.assertEqual(call_count[0], 1)
-        self.assertEqual(protocol.transport.sendto.call_count, 2)
-        self.assertEqual(first_bytes, second_bytes)
+        assert call_count[0] == 1
+        assert protocol.transport.sendto.call_count == 2
+        assert first_bytes == second_bytes
 
     def test_dedup_disabled_runs_handler_every_time(self):
         call_count = [0]
@@ -304,9 +305,10 @@ class AsyncServerDedupTests(unittest.TestCase):
         addr = ("10.0.0.1", 12345)
         protocol.datagram_received(data, addr)
         protocol.datagram_received(data, addr)
-        self.assertEqual(call_count[0], 2)
-        self.assertIsNone(server._dedup_cache)
+        assert call_count[0] == 2
+        assert server._dedup_cache is None
 
 
-if __name__ == "__main__":
-    unittest.main()
+# Quiet unused-import linters: pytest is the explicit import marker for
+# pytest-style files even when no fixture is referenced.
+_ = pytest

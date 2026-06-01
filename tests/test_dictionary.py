@@ -1,7 +1,9 @@
 import operator
 import os
-import unittest
+import tempfile
 from io import StringIO
+
+import pytest
 
 from pyrad2.dictfile import DictFile
 from pyrad2.dictionary import Attribute, Dictionary, ParseError
@@ -10,29 +12,30 @@ from pyrad2.tools import decode_attr
 from .base import TEST_ROOT_PATH
 
 
-class AttributeTests(unittest.TestCase):
-    def testInvalidDataType(self):
-        self.assertRaises(ValueError, Attribute, "name", "code", "datatype")
+class TestAttribute:
+    def test_invalid_data_type(self):
+        with pytest.raises(ValueError):
+            Attribute("name", "code", "datatype")
 
-    def testConstructionParameters(self):
+    def test_construction_parameters(self):
         attr = Attribute("name", "code", "integer", False, "vendor")
-        self.assertEqual(attr.name, "name")
-        self.assertEqual(attr.code, "code")
-        self.assertEqual(attr.type, "integer")
-        self.assertEqual(attr.is_sub_attribute, False)
-        self.assertEqual(attr.vendor, "vendor")
-        self.assertEqual(len(attr.values), 0)
-        self.assertEqual(len(attr.sub_attributes), 0)
+        assert attr.name == "name"
+        assert attr.code == "code"
+        assert attr.type == "integer"
+        assert attr.is_sub_attribute is False
+        assert attr.vendor == "vendor"
+        assert len(attr.values) == 0
+        assert len(attr.sub_attributes) == 0
 
-    def testNamedConstructionParameters(self):
+    def test_named_construction_parameters(self):
         attr = Attribute(name="name", code="code", datatype="integer", vendor="vendor")
-        self.assertEqual(attr.name, "name")
-        self.assertEqual(attr.code, "code")
-        self.assertEqual(attr.type, "integer")
-        self.assertEqual(attr.vendor, "vendor")
-        self.assertEqual(len(attr.values), 0)
+        assert attr.name == "name"
+        assert attr.code == "code"
+        assert attr.type == "integer"
+        assert attr.vendor == "vendor"
+        assert len(attr.values) == 0
 
-    def testValues(self):
+    def test_values(self):
         attr = Attribute(
             "name",
             "code",
@@ -41,31 +44,34 @@ class AttributeTests(unittest.TestCase):
             "vendor",
             dict(pie="custard", shake="vanilla"),
         )
-        self.assertEqual(len(attr.values), 2)
-        self.assertEqual(attr.values["shake"], "vanilla")
+        assert len(attr.values) == 2
+        assert attr.values["shake"] == "vanilla"
 
 
-class DictionaryInterfaceTests(unittest.TestCase):
-    def testEmptyDictionary(self):
-        dict = Dictionary()
-        self.assertEqual(len(dict), 0)
+class TestDictionaryInterface:
+    def test_empty_dictionary(self):
+        d = Dictionary()
+        assert len(d) == 0
 
-    def testContainment(self):
-        dict = Dictionary()
-        self.assertEqual("test" in dict, False)
-        self.assertEqual(dict.has_key("test"), False)
-        dict.attributes["test"] = "dummy"
-        self.assertEqual("test" in dict, True)
-        self.assertEqual(dict.has_key("test"), True)
+    def test_containment(self):
+        d = Dictionary()
+        assert "test" not in d
+        assert d.has_key("test") is False
+        d.attributes["test"] = "dummy"
+        assert "test" in d
+        assert d.has_key("test") is True
 
-    def testReadonlyContainer(self):
-        dict = Dictionary()
-        self.assertRaises(TypeError, operator.setitem, dict, "test", "dummy")
-        self.assertRaises(AttributeError, operator.attrgetter("clear"), dict)
-        self.assertRaises(AttributeError, operator.attrgetter("update"), dict)
+    def test_readonly_container(self):
+        d = Dictionary()
+        with pytest.raises(TypeError):
+            operator.setitem(d, "test", "dummy")
+        with pytest.raises(AttributeError):
+            operator.attrgetter("clear")(d)
+        with pytest.raises(AttributeError):
+            operator.attrgetter("update")(d)
 
 
-class DictionaryParsingTests(unittest.TestCase):
+class TestDictionaryParsing:
     simple_dict_values = [
         ("Test-String", 1, "string"),
         ("Test-Octets", 2, "octets"),
@@ -83,135 +89,119 @@ class DictionaryParsingTests(unittest.TestCase):
         ("Test-Integer64-Oct", 10, "integer64"),
     ]
 
-    def setUp(self):
+    def setup_method(self):
         self.path = os.path.join(TEST_ROOT_PATH, "data")
         self.dict = Dictionary(os.path.join(self.path, "simple"))
 
-    def testParseEmptyDictionary(self):
-        dict = Dictionary(StringIO(""))
-        self.assertEqual(len(dict), 0)
+    def test_parse_empty_dictionary(self):
+        d = Dictionary(StringIO(""))
+        assert len(d) == 0
 
-    def testParseMultipleDictionaries(self):
-        dict = Dictionary(StringIO(""))
-        self.assertEqual(len(dict), 0)
+    def test_parse_multiple_dictionaries(self):
+        d = Dictionary(StringIO(""))
+        assert len(d) == 0
         one = StringIO("ATTRIBUTE Test-First 1 string")
         two = StringIO("ATTRIBUTE Test-Second 2 string")
-        dict = Dictionary(StringIO(""), one, two)
-        self.assertEqual(len(dict), 2)
+        d = Dictionary(StringIO(""), one, two)
+        assert len(d) == 2
 
-    def testParseSimpleDictionary(self):
-        self.assertEqual(len(self.dict), len(self.simple_dict_values))
-        for attr, code, type in self.simple_dict_values:
-            attr = self.dict[attr]
-            self.assertEqual(attr.code, code)
-            self.assertEqual(attr.type, type)
+    def test_parse_simple_dictionary(self):
+        assert len(self.dict) == len(self.simple_dict_values)
+        for name, code, type_ in self.simple_dict_values:
+            attr = self.dict[name]
+            assert attr.code == code
+            assert attr.type == type_
 
-    def testAttributeTooFewColumnsError(self):
-        try:
+    def test_attribute_too_few_columns_error(self):
+        with pytest.raises(ParseError, match="attribute"):
             self.dict.read_dictionary(StringIO("ATTRIBUTE Oops-Too-Few-Columns"))
-        except ParseError as e:
-            self.assertEqual("attribute" in str(e), True)
-        else:
-            self.fail()
 
-    def testAttributeUnknownTypeError(self):
-        try:
+    def test_attribute_unknown_type_error(self):
+        with pytest.raises(ParseError, match="dummy"):
             self.dict.read_dictionary(StringIO("ATTRIBUTE Test-Type 1 dummy"))
-        except ParseError as e:
-            self.assertEqual("dummy" in str(e), True)
-        else:
-            self.fail()
 
-    def testAttributeUnknownVendorError(self):
-        try:
+    def test_attribute_unknown_vendor_error(self):
+        with pytest.raises(ParseError, match="Simplon"):
             self.dict.read_dictionary(StringIO("ATTRIBUTE Test-Type 1 Simplon"))
-        except ParseError as e:
-            self.assertEqual("Simplon" in str(e), True)
-        else:
-            self.fail()
 
-    def testAttributeOptions(self):
+    def test_attribute_options(self):
         self.dict.read_dictionary(
             StringIO("ATTRIBUTE Option-Type 1 string has_tag,encrypt=1")
         )
-        self.assertEqual(self.dict["Option-Type"].has_tag, True)
-        self.assertEqual(self.dict["Option-Type"].encrypt, 1)
-        self.assertEqual(self.dict["Option-Type"].concat, False)
+        assert self.dict["Option-Type"].has_tag is True
+        assert self.dict["Option-Type"].encrypt == 1
+        assert self.dict["Option-Type"].concat is False
 
-    def testAttributeConcatOption(self):
+    def test_attribute_concat_option(self):
         # FreeRADIUS-style concat option keeps the attribute defined
         # instead of silently dropping it (the old behaviour).
         self.dict.read_dictionary(
             StringIO("ATTRIBUTE Long-Octets 30 octets concat")
         )
-        self.assertEqual(self.dict["Long-Octets"].concat, True)
-        self.assertEqual(self.dict["Long-Octets"].type, "octets")
-        self.assertEqual(self.dict["Long-Octets"].code, 30)
+        assert self.dict["Long-Octets"].concat is True
+        assert self.dict["Long-Octets"].type == "octets"
+        assert self.dict["Long-Octets"].code == 30
 
-    def testAttributeConcatCombinedWithOtherOptions(self):
+    def test_attribute_concat_combined_with_other_options(self):
         self.dict.read_dictionary(
             StringIO("ATTRIBUTE Frag-Octets 31 octets has_tag,concat,encrypt=2")
         )
         attr = self.dict["Frag-Octets"]
-        self.assertTrue(attr.has_tag)
-        self.assertTrue(attr.concat)
-        self.assertEqual(attr.encrypt, 2)
+        assert attr.has_tag
+        assert attr.concat
+        assert attr.encrypt == 2
 
-    def testAttributeEncryptionError(self):
-        try:
+    def test_attribute_encryption_error(self):
+        with pytest.raises(ParseError, match="encrypt"):
             self.dict.read_dictionary(
                 StringIO("ATTRIBUTE Test-Type 1 string encrypt=4")
             )
-        except ParseError as e:
-            self.assertEqual("encrypt" in str(e), True)
-        else:
-            self.fail()
 
-    def testValueTooFewColumnsError(self):
-        try:
+    def test_value_too_few_columns_error(self):
+        with pytest.raises(ParseError, match="value"):
             self.dict.read_dictionary(StringIO("VALUE Oops-Too-Few-Columns"))
-        except ParseError as e:
-            self.assertEqual("value" in str(e), True)
-        else:
-            self.fail()
 
-    def testValueForUnknownAttributeError(self):
-        try:
-            self.dict.read_dictionary(StringIO("VALUE Test-Attribute Test-Text 1"))
-        except ParseError as e:
-            self.assertEqual("unknown attribute" in str(e), True)
-        else:
-            self.fail()
+    def test_value_for_unknown_attribute_error(self):
+        with pytest.raises(ParseError, match="unknown attribute"):
+            self.dict.read_dictionary(
+                StringIO("VALUE Test-Attribute Test-Text 1")
+            )
 
-    def testIntegerValueParsing(self):
-        self.assertEqual(len(self.dict["Test-Integer"].values), 0)
+    def test_integer_value_parsing(self):
+        assert len(self.dict["Test-Integer"].values) == 0
         self.dict.read_dictionary(StringIO("VALUE Test-Integer Value-Six 5"))
-        self.assertEqual(len(self.dict["Test-Integer"].values), 1)
-        self.assertEqual(
-            decode_attr("integer", self.dict["Test-Integer"].values["Value-Six"]), 5
+        assert len(self.dict["Test-Integer"].values) == 1
+        assert (
+            decode_attr("integer", self.dict["Test-Integer"].values["Value-Six"])
+            == 5
         )
 
-    def testInteger64ValueParsing(self):
-        self.assertEqual(len(self.dict["Test-Integer64"].values), 0)
+    def test_integer64_value_parsing(self):
+        assert len(self.dict["Test-Integer64"].values) == 0
         self.dict.read_dictionary(StringIO("VALUE Test-Integer64 Value-Six 5"))
-        self.assertEqual(len(self.dict["Test-Integer64"].values), 1)
-        self.assertEqual(
-            decode_attr("integer64", self.dict["Test-Integer64"].values["Value-Six"]), 5
+        assert len(self.dict["Test-Integer64"].values) == 1
+        assert (
+            decode_attr(
+                "integer64", self.dict["Test-Integer64"].values["Value-Six"]
+            )
+            == 5
         )
 
-    def testStringValueParsing(self):
-        self.assertEqual(len(self.dict["Test-String"].values), 0)
+    def test_string_value_parsing(self):
+        assert len(self.dict["Test-String"].values) == 0
         self.dict.read_dictionary(
             StringIO("VALUE Test-String Value-Custard custardpie")
         )
-        self.assertEqual(len(self.dict["Test-String"].values), 1)
-        self.assertEqual(
-            decode_attr("string", self.dict["Test-String"].values["Value-Custard"]),
-            "custardpie",
+        assert len(self.dict["Test-String"].values) == 1
+        assert (
+            decode_attr(
+                "string", self.dict["Test-String"].values["Value-Custard"]
+            )
+            == "custardpie"
         )
 
-    def testOctetValueParsing(self):
-        self.assertEqual(len(self.dict["Test-Octets"].values), 0)
+    def test_octet_value_parsing(self):
+        assert len(self.dict["Test-Octets"].values) == 0
         self.dict.read_dictionary(
             StringIO(
                 "ATTRIBUTE Test-Octets 1 octets\n"
@@ -219,95 +209,76 @@ class DictionaryParsingTests(unittest.TestCase):
                 "VALUE Test-Octets Value-B 0x42\n"
             )
         )  # "B"
-        self.assertEqual(len(self.dict["Test-Octets"].values), 2)
-        self.assertEqual(
-            decode_attr("octets", self.dict["Test-Octets"].values["Value-A"]), b"A"
+        assert len(self.dict["Test-Octets"].values) == 2
+        assert (
+            decode_attr("octets", self.dict["Test-Octets"].values["Value-A"]) == b"A"
         )
-        self.assertEqual(
-            decode_attr("octets", self.dict["Test-Octets"].values["Value-B"]), b"B"
-        )
-
-    def testTlvParsing(self):
-        self.assertEqual(len(self.dict["Test-Tlv"].sub_attributes), 2)
-        self.assertEqual(
-            self.dict["Test-Tlv"].sub_attributes, {1: "Test-Tlv-Str", 2: "Test-Tlv-Int"}
+        assert (
+            decode_attr("octets", self.dict["Test-Octets"].values["Value-B"]) == b"B"
         )
 
-    def testSubTlvParsing(self):
+    def test_tlv_parsing(self):
+        assert len(self.dict["Test-Tlv"].sub_attributes) == 2
+        assert self.dict["Test-Tlv"].sub_attributes == {
+            1: "Test-Tlv-Str",
+            2: "Test-Tlv-Int",
+        }
+
+    def test_sub_tlv_parsing(self):
         for attr, _, _ in self.simple_dict_values:
             if attr.startswith("Test-Tlv-"):
-                self.assertEqual(self.dict[attr].is_sub_attribute, True)
-                self.assertEqual(self.dict[attr].parent, self.dict["Test-Tlv"])
+                assert self.dict[attr].is_sub_attribute is True
+                assert self.dict[attr].parent == self.dict["Test-Tlv"]
             else:
-                self.assertEqual(self.dict[attr].is_sub_attribute, False)
-                self.assertEqual(self.dict[attr].parent, None)
+                assert self.dict[attr].is_sub_attribute is False
+                assert self.dict[attr].parent is None
 
         # tlv with vendor
         full_dict = Dictionary(os.path.join(self.path, "full"))
-        self.assertEqual(full_dict["Simplon-Tlv-Str"].is_sub_attribute, True)
-        self.assertEqual(full_dict["Simplon-Tlv-Str"].parent, full_dict["Simplon-Tlv"])
-        self.assertEqual(full_dict["Simplon-Tlv-Int"].is_sub_attribute, True)
-        self.assertEqual(full_dict["Simplon-Tlv-Int"].parent, full_dict["Simplon-Tlv"])
+        assert full_dict["Simplon-Tlv-Str"].is_sub_attribute is True
+        assert full_dict["Simplon-Tlv-Str"].parent == full_dict["Simplon-Tlv"]
+        assert full_dict["Simplon-Tlv-Int"].is_sub_attribute is True
+        assert full_dict["Simplon-Tlv-Int"].parent == full_dict["Simplon-Tlv"]
 
-    def testVenderTooFewColumnsError(self):
-        try:
+    def test_vendor_too_few_columns_error(self):
+        with pytest.raises(ParseError, match="vendor"):
             self.dict.read_dictionary(StringIO("VENDOR Simplon"))
-        except ParseError as e:
-            self.assertEqual("vendor" in str(e), True)
-        else:
-            self.fail()
 
-    def testVendorParsing(self):
-        self.assertRaises(
-            ParseError,
-            self.dict.read_dictionary,
-            StringIO("ATTRIBUTE Test-Type 1 integer Simplon"),
-        )
+    def test_vendor_parsing(self):
+        with pytest.raises(ParseError):
+            self.dict.read_dictionary(
+                StringIO("ATTRIBUTE Test-Type 1 integer Simplon")
+            )
         self.dict.read_dictionary(StringIO("VENDOR Simplon 42"))
-        self.assertEqual(self.dict.vendors["Simplon"], 42)
+        assert self.dict.vendors["Simplon"] == 42
         self.dict.read_dictionary(StringIO("ATTRIBUTE Test-Type 1 integer Simplon"))
-        self.assertEqual(self.dict.attrindex["Test-Type"], (42, 1))
+        assert self.dict.attrindex["Test-Type"] == (42, 1)
 
-    def testVendorOptionError(self):
-        self.assertRaises(
-            ParseError,
-            self.dict.read_dictionary,
-            StringIO("ATTRIBUTE Test-Type 1 integer Simplon"),
-        )
-        try:
+    def test_vendor_option_error(self):
+        with pytest.raises(ParseError):
+            self.dict.read_dictionary(
+                StringIO("ATTRIBUTE Test-Type 1 integer Simplon")
+            )
+        with pytest.raises(ParseError, match="option"):
             self.dict.read_dictionary(StringIO("VENDOR Simplon 42 badoption"))
-        except ParseError as e:
-            self.assertEqual("option" in str(e), True)
-        else:
-            self.fail()
 
-    def testVendorFormatError(self):
-        self.assertRaises(
-            ParseError,
-            self.dict.read_dictionary,
-            StringIO("ATTRIBUTE Test-Type 1 integer Simplon"),
-        )
-        try:
+    def test_vendor_format_error(self):
+        with pytest.raises(ParseError):
+            self.dict.read_dictionary(
+                StringIO("ATTRIBUTE Test-Type 1 integer Simplon")
+            )
+        with pytest.raises(ParseError, match="format"):
             self.dict.read_dictionary(StringIO("VENDOR Simplon 42 format=5,4"))
-        except ParseError as e:
-            self.assertEqual("format" in str(e), True)
-        else:
-            self.fail()
 
-    def testVendorFormatSyntaxError(self):
-        self.assertRaises(
-            ParseError,
-            self.dict.read_dictionary,
-            StringIO("ATTRIBUTE Test-Type 1 integer Simplon"),
-        )
-        try:
+    def test_vendor_format_syntax_error(self):
+        with pytest.raises(ParseError):
+            self.dict.read_dictionary(
+                StringIO("ATTRIBUTE Test-Type 1 integer Simplon")
+            )
+        with pytest.raises(ParseError, match="Syntax"):
             self.dict.read_dictionary(StringIO("VENDOR Simplon 42 format=a,1"))
-        except ParseError as e:
-            self.assertEqual("Syntax" in str(e), True)
-        else:
-            self.fail()
 
-    def testExtendedParentAndSubAttribute(self):
+    def test_extended_parent_and_sub_attribute(self):
         # RFC 6929: parent 241 declared as ``extended``, with a sub-attribute
         # under the dotted-code form ``241.1``.
         self.dict.read_dictionary(
@@ -317,15 +288,15 @@ class DictionaryParsingTests(unittest.TestCase):
             )
         )
         parent = self.dict["Extended-Attribute-1"]
-        self.assertEqual(parent.type, "extended")
-        self.assertEqual(parent.code, 241)
+        assert parent.type == "extended"
+        assert parent.code == 241
         sub = self.dict["Frag-Status"]
-        self.assertTrue(sub.is_sub_attribute)
-        self.assertEqual(sub.code, 1)
-        self.assertIs(sub.parent, parent)
-        self.assertEqual(parent.sub_attributes, {1: "Frag-Status"})
+        assert sub.is_sub_attribute
+        assert sub.code == 1
+        assert sub.parent is parent
+        assert parent.sub_attributes == {1: "Frag-Status"}
 
-    def testLongExtendedParentAndSubAttribute(self):
+    def test_long_extended_parent_and_sub_attribute(self):
         self.dict.read_dictionary(
             StringIO(
                 "ATTRIBUTE Extended-Attribute-5 245 long-extended\n"
@@ -333,13 +304,13 @@ class DictionaryParsingTests(unittest.TestCase):
             )
         )
         parent = self.dict["Extended-Attribute-5"]
-        self.assertEqual(parent.type, "long-extended")
-        self.assertEqual(parent.code, 245)
+        assert parent.type == "long-extended"
+        assert parent.code == 245
         sub = self.dict["WiMAX-Blob"]
-        self.assertTrue(sub.is_sub_attribute)
-        self.assertIs(sub.parent, parent)
+        assert sub.is_sub_attribute
+        assert sub.parent is parent
 
-    def testEvsParserStoresFourTupleKey(self):
+    def test_evs_parser_stores_four_tuple_key(self):
         # RFC 6929 §2.3 — EVS-VSA. The marker lives at 241.26 with type evs,
         # then BEGIN-VENDOR parent= scopes the vendor block beneath it.
         self.dict.read_dictionary(
@@ -354,18 +325,18 @@ class DictionaryParsingTests(unittest.TestCase):
             )
         )
         # The vendor attributes index under the canonical 4-tuple.
-        self.assertEqual(self.dict.attrindex["Example-Attr-1"], (241, 26, 12345, 1))
-        self.assertEqual(self.dict.attrindex["Example-Attr-2"], (241, 26, 12345, 2))
+        assert self.dict.attrindex["Example-Attr-1"] == (241, 26, 12345, 1)
+        assert self.dict.attrindex["Example-Attr-2"] == (241, 26, 12345, 2)
         # And their parent points back at the EVS marker.
         marker = self.dict["Extended-Vendor-Specific-1"]
-        self.assertEqual(marker.type, "evs")
-        self.assertIs(self.dict["Example-Attr-1"].parent, marker)
-        self.assertEqual(self.dict["Example-Attr-1"].vendor, "Example")
-        self.assertTrue(self.dict["Example-Attr-1"].is_sub_attribute)
+        assert marker.type == "evs"
+        assert self.dict["Example-Attr-1"].parent is marker
+        assert self.dict["Example-Attr-1"].vendor == "Example"
+        assert self.dict["Example-Attr-1"].is_sub_attribute
 
-    def testEvsRejectsNonEvsParent(self):
+    def test_evs_rejects_non_evs_parent(self):
         # parent= must refer to an attribute whose type is "evs".
-        try:
+        with pytest.raises(ParseError, match="(?i)evs"):
             self.dict.read_dictionary(
                 StringIO(
                     "ATTRIBUTE Extended-Attribute-1 241 extended\n"
@@ -374,69 +345,53 @@ class DictionaryParsingTests(unittest.TestCase):
                     "BEGIN-VENDOR Example parent=Not-Evs\n"
                 )
             )
-        except ParseError as e:
-            self.assertIn("evs", str(e).lower())
-        else:
-            self.fail("expected ParseError for non-evs parent")
 
-    def testVendorFormatStoredAndRetrievable(self):
+    def test_vendor_format_stored_and_retrievable(self):
         # Default format is (1, 1) when no format= is declared.
         self.dict.read_dictionary(StringIO("VENDOR Cisco 9"))
-        self.assertEqual(self.dict.vendor_format(9), (1, 1))
+        assert self.dict.vendor_format(9) == (1, 1)
 
         # Explicit format= persists on the dictionary.
         self.dict.read_dictionary(StringIO("VENDOR USR 429 format=4,0"))
-        self.assertEqual(self.dict.vendor_format(429), (4, 0))
+        assert self.dict.vendor_format(429) == (4, 0)
 
         self.dict.read_dictionary(StringIO("VENDOR Big-Type 100 format=2,1"))
-        self.assertEqual(self.dict.vendor_format(100), (2, 1))
+        assert self.dict.vendor_format(100) == (2, 1)
 
         # Unknown vendor ids fall back to the default.
-        self.assertEqual(self.dict.vendor_format(99999), (1, 1))
+        assert self.dict.vendor_format(99999) == (1, 1)
 
-    def testBeginVendorTooFewColumns(self):
-        try:
+    def test_begin_vendor_too_few_columns(self):
+        with pytest.raises(ParseError, match="begin-vendor"):
             self.dict.read_dictionary(StringIO("BEGIN-VENDOR"))
-        except ParseError as e:
-            self.assertEqual("begin-vendor" in str(e), True)
-        else:
-            self.fail()
 
-    def testBeginVendorUnknownVendor(self):
-        try:
+    def test_begin_vendor_unknown_vendor(self):
+        with pytest.raises(ParseError, match="Simplon"):
             self.dict.read_dictionary(StringIO("BEGIN-VENDOR Simplon"))
-        except ParseError as e:
-            self.assertEqual("Simplon" in str(e), True)
-        else:
-            self.fail()
 
-    def testBeginVendorParsing(self):
+    def test_begin_vendor_parsing(self):
         self.dict.read_dictionary(
             StringIO(
-                "VENDOR Simplon 42\nBEGIN-VENDOR Simplon\nATTRIBUTE Test-Type 1 integer"
+                "VENDOR Simplon 42\n"
+                "BEGIN-VENDOR Simplon\n"
+                "ATTRIBUTE Test-Type 1 integer"
             )
         )
-        self.assertEqual(self.dict.attrindex["Test-Type"], (42, 1))
+        assert self.dict.attrindex["Test-Type"] == (42, 1)
 
-    def testEndVendorUnknownVendor(self):
-        try:
+    def test_end_vendor_unknown_vendor(self):
+        with pytest.raises(ParseError, match="end-vendor"):
             self.dict.read_dictionary(StringIO("END-VENDOR"))
-        except ParseError as e:
-            self.assertEqual("end-vendor" in str(e), True)
-        else:
-            self.fail()
 
-    def testEndVendorUnbalanced(self):
-        try:
+    def test_end_vendor_unbalanced(self):
+        with pytest.raises(ParseError, match="Oops"):
             self.dict.read_dictionary(
-                StringIO("VENDOR Simplon 42\nBEGIN-VENDOR Simplon\nEND-VENDOR Oops\n")
+                StringIO(
+                    "VENDOR Simplon 42\nBEGIN-VENDOR Simplon\nEND-VENDOR Oops\n"
+                )
             )
-        except ParseError as e:
-            self.assertEqual("Oops" in str(e), True)
-        else:
-            self.fail()
 
-    def testEndVendorParsing(self):
+    def test_end_vendor_parsing(self):
         self.dict.read_dictionary(
             StringIO(
                 "VENDOR Simplon 42\n"
@@ -445,10 +400,10 @@ class DictionaryParsingTests(unittest.TestCase):
                 "ATTRIBUTE Test-Type 1 integer"
             )
         )
-        self.assertEqual(self.dict.attrindex["Test-Type"], 1)
+        assert self.dict.attrindex["Test-Type"] == 1
 
-    def testInclude(self):
-        try:
+    def test_include(self):
+        with pytest.raises(OSError, match="this_file_does_not_exist"):
             self.dict.read_dictionary(
                 StringIO(
                     "$INCLUDE this_file_does_not_exist\n"
@@ -458,35 +413,27 @@ class DictionaryParsingTests(unittest.TestCase):
                     "ATTRIBUTE Test-Type 1 integer"
                 )
             )
-        except OSError as e:
-            self.assertEqual("this_file_does_not_exist" in str(e), True)
-        else:
-            self.fail()
 
-    def testDictFilePostParse(self):
+    def test_dict_file_post_parse(self):
         f = DictFile(StringIO("VENDOR Simplon 42\n"))
         for _ in f:
             pass
-        self.assertEqual(f.file(), "")
-        self.assertEqual(f.line(), -1)
+        assert f.file() == ""
+        assert f.line() == -1
 
-    def testDictFileParseError(self):
+    def test_dict_file_parse_error(self):
         tmpdict = Dictionary()
-        try:
+        with pytest.raises(ParseError, match="dictfiletest"):
             tmpdict.read_dictionary(os.path.join(self.path, "dictfiletest"))
-        except ParseError as e:
-            self.assertEqual("dictfiletest" in str(e), True)
-        else:
-            self.fail()
 
 
-class IncludeSandboxingTests(unittest.TestCase):
+class TestIncludeSandboxing:
     """Regression coverage for the $INCLUDE path-traversal hardening."""
 
     def test_absolute_include_outside_base_is_rejected(self):
         # $INCLUDE /etc/passwd from an untrusted dictionary used to read
         # whatever the process had access to. Now it must be rejected.
-        with self.assertRaisesRegex(ParseError, "escapes the dictionary base"):
+        with pytest.raises(ParseError, match="escapes the dictionary base"):
             Dictionary(
                 StringIO("$INCLUDE /etc/passwd\n"),
                 include_base_dir=TEST_ROOT_PATH,
@@ -494,7 +441,7 @@ class IncludeSandboxingTests(unittest.TestCase):
 
     def test_relative_traversal_is_rejected(self):
         # ../ traversal also escapes the trusted base.
-        with self.assertRaisesRegex(ParseError, "escapes the dictionary base"):
+        with pytest.raises(ParseError, match="escapes the dictionary base"):
             Dictionary(
                 StringIO("$INCLUDE ../../../etc/passwd\n"),
                 include_base_dir=TEST_ROOT_PATH,
@@ -504,66 +451,56 @@ class IncludeSandboxingTests(unittest.TestCase):
         # Sanity: the canonical FreeRADIUS-style sibling include still
         # resolves under the trusted base.
         d = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
-        self.assertTrue(len(d) > 0)
+        assert len(d) > 0
 
 
-class VendorIdRangeTests(unittest.TestCase):
+class TestVendorIdRange:
     """Regression coverage for the vendor-id range check."""
 
     def test_negative_vendor_id_is_rejected(self):
-        with self.assertRaisesRegex(ParseError, "out of range"):
+        with pytest.raises(ParseError, match="out of range"):
             Dictionary(StringIO("VENDOR Bogus -1\n"))
 
     def test_overflow_vendor_id_is_rejected(self):
         # 0x1000000 is one past the 24-bit ceiling.
-        with self.assertRaisesRegex(ParseError, "out of range"):
+        with pytest.raises(ParseError, match="out of range"):
             Dictionary(StringIO("VENDOR Bogus 0x1000000\n"))
 
     def test_non_integer_vendor_id_is_rejected(self):
-        with self.assertRaisesRegex(ParseError, "Invalid vendor id"):
+        with pytest.raises(ParseError, match="Invalid vendor id"):
             Dictionary(StringIO("VENDOR Bogus notanumber\n"))
 
     def test_valid_vendor_id_is_accepted(self):
         d = Dictionary(StringIO("VENDOR Simplon 0xFFFFFF\n"))
-        self.assertEqual(d.vendors["Simplon"], 0xFFFFFF)
+        assert d.vendors["Simplon"] == 0xFFFFFF
 
 
-class ParseErrorMetadataTests(unittest.TestCase):
+class TestParseErrorMetadata:
     """Regression coverage for the ParseError signature tightening (H12)."""
 
     def test_filename_surfaces_in_error_message(self):
         # Pre-fix this branch passed ``name=state["file"]`` to ParseError,
         # which silently dropped it.
-        try:
-            Dictionary(
-                StringIO("ATTRIBUTE TooFew\n"),
-            )
-        except ParseError as exc:
-            self.assertEqual(exc.file, "")  # StringIO has no filename
-            self.assertIn("Incorrect number of tokens", exc.msg or "")
-        else:
-            self.fail("expected ParseError")
+        with pytest.raises(ParseError) as exc_info:
+            Dictionary(StringIO("ATTRIBUTE TooFew\n"))
+        assert exc_info.value.file == ""  # StringIO has no filename
+        assert "Incorrect number of tokens" in (exc_info.value.msg or "")
 
     def test_filename_surfaces_for_file_input(self):
         # The same error from a real file must carry the file name.
-        import tempfile
-
         with tempfile.NamedTemporaryFile("w", suffix=".dict", delete=False) as f:
             f.write("ATTRIBUTE TooFew\n")
             fname = f.name
         try:
-            try:
+            with pytest.raises(ParseError) as exc_info:
                 Dictionary(fname)
-            except ParseError as exc:
-                self.assertEqual(os.path.basename(fname), exc.file)
-                self.assertIn(os.path.basename(fname), str(exc))
-            else:
-                self.fail("expected ParseError")
+            assert os.path.basename(fname) == exc_info.value.file
+            assert os.path.basename(fname) in str(exc_info.value)
         finally:
             os.unlink(fname)
 
     def test_unknown_kwargs_are_rejected(self):
         # The old **data signature silently swallowed name=. The tightened
         # signature must reject it so future drift is impossible.
-        with self.assertRaises(TypeError):
+        with pytest.raises(TypeError):
             ParseError("oops", name="ignored")  # type: ignore[call-arg]

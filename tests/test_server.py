@@ -1,42 +1,43 @@
+import os
 import select
 import socket
-import unittest
-import os
-from .base import TEST_ROOT_PATH
-from .mock import MockFinished
-from .mock import MockFd
-from .mock import MockPoll
-from .mock import MockSocket
-from .mock import MockClassMethod
-from .mock import UnmockClassMethods
+
+import pytest
+
 from pyrad2 import packet
+from pyrad2.constants import PacketType
 from pyrad2.dictionary import Dictionary
 from pyrad2.packet import PacketError
-from pyrad2.server import RemoteHost
-from pyrad2.server import Server
-from pyrad2.server import ServerPacketError
-from pyrad2.constants import PacketType
+from pyrad2.server import RemoteHost, Server, ServerPacketError
+
+from .base import TEST_ROOT_PATH
+from .mock import (
+    MockClassMethod,
+    MockFd,
+    MockFinished,
+    MockPoll,
+    MockSocket,
+    UnmockClassMethods,
+)
 
 
-class TrivialObject:
-    """dummy objec"""
-
-    pass
+class _TrivialObject:
+    """dummy object"""
 
 
-class RemoteHostTests(unittest.TestCase):
-    def testSimpleConstruction(self):
+class TestRemoteHost:
+    def test_simple_construction(self):
         host = RemoteHost(
             "address", "secret", "name", "authport", "acctport", "coaport"
         )
-        self.assertEqual(host.address, "address")
-        self.assertEqual(host.secret, "secret")
-        self.assertEqual(host.name, "name")
-        self.assertEqual(host.authport, "authport")
-        self.assertEqual(host.acctport, "acctport")
-        self.assertEqual(host.coaport, "coaport")
+        assert host.address == "address"
+        assert host.secret == "secret"
+        assert host.name == "name"
+        assert host.authport == "authport"
+        assert host.acctport == "acctport"
+        assert host.coaport == "coaport"
 
-    def testNamedConstruction(self):
+    def test_named_construction(self):
         host = RemoteHost(
             address="address",
             secret="secret",
@@ -45,34 +46,34 @@ class RemoteHostTests(unittest.TestCase):
             acctport="acctport",
             coaport="coaport",
         )
-        self.assertEqual(host.address, "address")
-        self.assertEqual(host.secret, "secret")
-        self.assertEqual(host.name, "name")
-        self.assertEqual(host.authport, "authport")
-        self.assertEqual(host.acctport, "acctport")
-        self.assertEqual(host.coaport, "coaport")
+        assert host.address == "address"
+        assert host.secret == "secret"
+        assert host.name == "name"
+        assert host.authport == "authport"
+        assert host.acctport == "acctport"
+        assert host.coaport == "coaport"
 
 
-class ServerConstructiontests(unittest.TestCase):
-    def testSimpleConstruction(self):
+class TestServerConstruction:
+    def test_simple_construction(self):
         server = Server()
-        self.assertEqual(server.authfds, [])
-        self.assertEqual(server.acctfds, [])
-        self.assertEqual(server.authport, 1812)
-        self.assertEqual(server.acctport, 1813)
-        self.assertEqual(server.coaport, 3799)
-        self.assertEqual(server.hosts, {})
+        assert server.authfds == []
+        assert server.acctfds == []
+        assert server.authport == 1812
+        assert server.acctport == 1813
+        assert server.coaport == 3799
+        assert server.hosts == {}
 
-    def testParameterOrder(self):
+    def test_parameter_order(self):
         server = Server([], "authport", "acctport", "coaport", "hosts", "dict")
-        self.assertEqual(server.authfds, [])
-        self.assertEqual(server.acctfds, [])
-        self.assertEqual(server.authport, "authport")
-        self.assertEqual(server.acctport, "acctport")
-        self.assertEqual(server.coaport, "coaport")
-        self.assertEqual(server.dict, "dict")
+        assert server.authfds == []
+        assert server.acctfds == []
+        assert server.authport == "authport"
+        assert server.acctport == "acctport"
+        assert server.coaport == "coaport"
+        assert server.dict == "dict"
 
-    def testBindDuringConstruction(self):
+    def test_bind_during_construction(self):
         def bind_to_address(self, addr):
             self.bound.append(addr)
 
@@ -80,39 +81,41 @@ class ServerConstructiontests(unittest.TestCase):
         Server.bind_to_address = bind_to_address
 
         Server.bound = []
-        server = Server(["one", "two", "three"])
-        self.assertEqual(server.bound, ["one", "two", "three"])
-        del Server.bound
+        try:
+            server = Server(["one", "two", "three"])
+            assert server.bound == ["one", "two", "three"]
+        finally:
+            del Server.bound
+            Server.bind_to_address = bta
 
-        Server.bind_to_address = bta
 
-
-class SocketTests(unittest.TestCase):
-    def setUp(self):
-        self.orgsocket = socket.socket
+@pytest.mark.skipif(not hasattr(select, "poll"), reason="select.poll not available")
+class TestSocket:
+    def setup_method(self):
+        self._orgsocket = socket.socket
         socket.socket = MockSocket
         self.server = Server()
 
-    def tearDown(self):
-        socket.socket = self.orgsocket
+    def teardown_method(self):
+        socket.socket = self._orgsocket
 
-    def testBind(self):
+    def test_bind(self):
         self.server.bind_to_address("192.168.13.13")
-        self.assertEqual(len(self.server.authfds), 1)
-        self.assertEqual(self.server.authfds[0].address, ("192.168.13.13", 1812))
+        assert len(self.server.authfds) == 1
+        assert self.server.authfds[0].address == ("192.168.13.13", 1812)
 
-        self.assertEqual(len(self.server.acctfds), 1)
-        self.assertEqual(self.server.acctfds[0].address, ("192.168.13.13", 1813))
+        assert len(self.server.acctfds) == 1
+        assert self.server.acctfds[0].address == ("192.168.13.13", 1813)
 
-    def testBindv6(self):
+    def test_bind_v6(self):
         self.server.bind_to_address("2001:db8:123::1")
-        self.assertEqual(len(self.server.authfds), 1)
-        self.assertEqual(self.server.authfds[0].address, ("2001:db8:123::1", 1812))
+        assert len(self.server.authfds) == 1
+        assert self.server.authfds[0].address == ("2001:db8:123::1", 1812)
 
-        self.assertEqual(len(self.server.acctfds), 1)
-        self.assertEqual(self.server.acctfds[0].address, ("2001:db8:123::1", 1813))
+        assert len(self.server.acctfds) == 1
+        assert self.server.acctfds[0].address == ("2001:db8:123::1", 1813)
 
-    def testgrab_packet(self):
+    def test_grab_packet(self):
         from pyrad2 import packet as packet_mod
 
         captured: dict[str, object] = {}
@@ -121,11 +124,11 @@ class SocketTests(unittest.TestCase):
             captured["data"] = data
             captured["secret"] = secret
             captured["dict"] = dictionary
-            res = TrivialObject()
+            res = _TrivialObject()
             res.data = data
             return res
 
-        host = TrivialObject()
+        host = _TrivialObject()
         host.secret = b"sharedsecret"
         self.server.hosts["10.0.0.1"] = host
 
@@ -140,104 +143,93 @@ class SocketTests(unittest.TestCase):
         finally:
             packet_mod.parse_packet = orig_parse
 
-        self.assertTrue(isinstance(pkt, TrivialObject))
-        self.assertTrue(pkt.fd is fd)
-        self.assertEqual(pkt.source, ("10.0.0.1", 4242))
-        self.assertEqual(captured["secret"], b"sharedsecret")
-        self.assertEqual(captured["data"], b"raw-bytes")
+        assert isinstance(pkt, _TrivialObject)
+        assert pkt.fd is fd
+        assert pkt.source == ("10.0.0.1", 4242)
+        assert captured["secret"] == b"sharedsecret"
+        assert captured["data"] == b"raw-bytes"
 
-    def testgrab_packet_unknown_host_raises(self):
+    def test_grab_packet_unknown_host_raises(self):
         fd = MockFd()
         fd.source = ("stranger", 1812)
-        with self.assertRaisesRegex(ServerPacketError, "unknown host"):
+        with pytest.raises(ServerPacketError, match="unknown host"):
             self.server._grab_packet(fd)
 
-    def testPrepareSocketNoFds(self):
+    def test_prepare_socket_no_fds(self):
         self.server._poll = MockPoll()
         self.server._prepare_sockets()
 
-        self.assertEqual(self.server._poll.registry, {})
-        self.assertEqual(self.server._realauthfds, set())
-        self.assertEqual(self.server._realacctfds, set())
+        assert self.server._poll.registry == {}
+        assert self.server._realauthfds == set()
+        assert self.server._realacctfds == set()
 
-    def testPrepareSocketAuthFds(self):
+    def test_prepare_socket_auth_fds(self):
         self.server._poll = MockPoll()
         self.server._fdmap = {}
         self.server.authfds = [MockFd(12), MockFd(14)]
         self.server._prepare_sockets()
 
-        self.assertEqual(list(self.server._fdmap.keys()), [12, 14])
-        self.assertEqual(
-            self.server._poll.registry,
-            {
-                12: select.POLLIN | select.POLLPRI | select.POLLERR,
-                14: select.POLLIN | select.POLLPRI | select.POLLERR,
-            },
-        )
+        assert list(self.server._fdmap.keys()) == [12, 14]
+        assert self.server._poll.registry == {
+            12: select.POLLIN | select.POLLPRI | select.POLLERR,
+            14: select.POLLIN | select.POLLPRI | select.POLLERR,
+        }
 
-    def testPrepareSocketAcctFds(self):
+    def test_prepare_socket_acct_fds(self):
         self.server._poll = MockPoll()
         self.server._fdmap = {}
         self.server.acctfds = [MockFd(12), MockFd(14)]
         self.server._prepare_sockets()
 
-        self.assertEqual(list(self.server._fdmap.keys()), [12, 14])
-        self.assertEqual(
-            self.server._poll.registry,
-            {
-                12: select.POLLIN | select.POLLPRI | select.POLLERR,
-                14: select.POLLIN | select.POLLPRI | select.POLLERR,
-            },
-        )
+        assert list(self.server._fdmap.keys()) == [12, 14]
+        assert self.server._poll.registry == {
+            12: select.POLLIN | select.POLLPRI | select.POLLERR,
+            14: select.POLLIN | select.POLLPRI | select.POLLERR,
+        }
 
 
-class AuthPacketHandlingTests(unittest.TestCase):
-    def setUp(self):
+class TestAuthPacketHandling:
+    def setup_method(self):
         self.server = Server()
-        self.server.hosts["host"] = TrivialObject()
+        self.server.hosts["host"] = _TrivialObject()
         self.server.hosts["host"].secret = "supersecret"
-        self.packet = TrivialObject()
+        self.packet = _TrivialObject()
         self.packet.code = PacketType.AccessRequest
         self.packet.source = ("host", "port")
 
-    def testHandleAuthPacketUnknownHost(self):
+    def test_handle_auth_packet_unknown_host(self):
         self.packet.source = ("stranger", "port")
-        try:
+        with pytest.raises(ServerPacketError, match="unknown host"):
             self.server._handle_auth_packet(self.packet)
-        except ServerPacketError as e:
-            self.assertTrue("unknown host" in str(e))
-        else:
-            self.fail()
 
-    def testHandleAuthPacketWrongPort(self):
+    def test_handle_auth_packet_wrong_port(self):
         self.packet.code = PacketType.AccountingRequest
-        try:
+        with pytest.raises(ServerPacketError, match="port"):
             self.server._handle_auth_packet(self.packet)
-        except ServerPacketError as e:
-            self.assertTrue("port" in str(e))
-        else:
-            self.fail()
 
-    def testHandleAuthPacket(self):
+    def test_handle_auth_packet(self):
         def handle_auth_packet(self, pkt):
             self.handled = pkt
 
         hap = Server.handle_auth_packet
         Server.handle_auth_packet = handle_auth_packet
 
-        self.server._handle_auth_packet(self.packet)
-        self.assertTrue(self.server.handled is self.packet)
+        try:
+            self.server._handle_auth_packet(self.packet)
+            assert self.server.handled is self.packet
+        finally:
+            Server.handle_auth_packet = hap
 
-        Server.handle_auth_packet = hap
 
-
-class MessageAuthenticatorPolicyTests(unittest.TestCase):
-    def setUp(self):
+class TestMessageAuthenticatorPolicy:
+    def setup_method(self):
         self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "data/full"))
         self.remote_host = RemoteHost("host", b"secret", "host")
 
     def _server(self, **kwargs):
-        return Server(hosts={"host": self.remote_host}, dict=self.dictionary, **kwargs)
+        return Server(
+            hosts={"host": self.remote_host}, dict=self.dictionary, **kwargs
+        )
 
     def _parse_auth_packet(self, pkt):
         parsed = packet.AuthPacket(
@@ -249,7 +241,9 @@ class MessageAuthenticatorPolicyTests(unittest.TestCase):
         return parsed
 
     def _parse_auth_packet_bytes(self, data):
-        parsed = packet.AuthPacket(packet=data, secret=b"secret", dict=self.dictionary)
+        parsed = packet.AuthPacket(
+            packet=data, secret=b"secret", dict=self.dictionary
+        )
         parsed.source = ("host", 12345)
         return parsed
 
@@ -285,7 +279,7 @@ class MessageAuthenticatorPolicyTests(unittest.TestCase):
 
         # require_message_authenticator=False isolates the EAP-specific
         # policy gate (otherwise the general BlastRADIUS rule fires first).
-        with self.assertRaisesRegex(PacketError, "EAP-Message requires"):
+        with pytest.raises(PacketError, match="EAP-Message requires"):
             self._server(
                 require_message_authenticator=False
             )._handle_auth_packet(self._parse_auth_packet(pkt))
@@ -305,16 +299,18 @@ class MessageAuthenticatorPolicyTests(unittest.TestCase):
         data = bytearray(pkt.request_packet())
         data[-1] ^= 0xFF
 
-        with self.assertRaisesRegex(PacketError, "Message-Authenticator is invalid"):
-            self._server()._handle_auth_packet(self._parse_auth_packet_bytes(bytes(data)))
+        with pytest.raises(PacketError, match="Message-Authenticator is invalid"):
+            self._server()._handle_auth_packet(
+                self._parse_auth_packet_bytes(bytes(data))
+            )
 
     def test_require_message_authenticator_rejects_plain_auth_request(self):
         pkt = self._auth_packet()
 
-        with self.assertRaisesRegex(PacketError, "attribute is required"):
-            self._server(require_message_authenticator=True)._handle_auth_packet(
-                self._parse_auth_packet(pkt)
-            )
+        with pytest.raises(PacketError, match="attribute is required"):
+            self._server(
+                require_message_authenticator=True
+            )._handle_auth_packet(self._parse_auth_packet(pkt))
 
     def test_blastradius_default_rejects_plain_auth_request(self):
         # C2 regression: the constructor default now mitigates BlastRADIUS
@@ -322,7 +318,7 @@ class MessageAuthenticatorPolicyTests(unittest.TestCase):
         # MUST be rejected without the caller having to opt in.
         pkt = self._auth_packet()
 
-        with self.assertRaisesRegex(PacketError, "attribute is required"):
+        with pytest.raises(PacketError, match="attribute is required"):
             self._server()._handle_auth_packet(self._parse_auth_packet(pkt))
 
     def test_create_reply_packet_preserves_request_message_authenticator_policy(self):
@@ -333,7 +329,7 @@ class MessageAuthenticatorPolicyTests(unittest.TestCase):
 
         reply = server.create_reply_packet(parsed)
 
-        self.assertTrue(reply.has_message_authenticator())
+        assert reply.has_message_authenticator()
 
     def test_auth_status_server_replies_without_auth_side_effects(self):
         class CaptureFd:
@@ -344,18 +340,18 @@ class MessageAuthenticatorPolicyTests(unittest.TestCase):
                 self.sent.append((data, target))
 
         server = self._server()
-        server.handle_auth_packet = lambda pkt: self.fail("auth handler called")
+        server.handle_auth_packet = lambda pkt: pytest.fail("auth handler called")
         parsed = self._parse_status_packet(self._status_packet())
         parsed.fd = CaptureFd()
 
         server._handle_auth_packet(parsed)
 
-        self.assertEqual(len(parsed.fd.sent), 1)
+        assert len(parsed.fd.sent) == 1
         rawreply, target = parsed.fd.sent[0]
         reply = parsed.create_reply(packet=rawreply)
-        self.assertEqual(target, parsed.source)
-        self.assertEqual(reply.code, PacketType.AccessAccept)
-        self.assertTrue(parsed.verify_reply(reply, rawreply=rawreply))
+        assert target == parsed.source
+        assert reply.code == PacketType.AccessAccept
+        assert parsed.verify_reply(reply, rawreply=rawreply)
 
     def test_accounting_status_server_replies_without_accounting_side_effects(self):
         class CaptureFd:
@@ -366,7 +362,7 @@ class MessageAuthenticatorPolicyTests(unittest.TestCase):
                 self.sent.append((data, target))
 
         server = self._server()
-        server.handle_acct_packet = lambda pkt: self.fail("acct handler called")
+        server.handle_acct_packet = lambda pkt: pytest.fail("acct handler called")
         parsed = self._parse_status_packet(self._status_packet())
         parsed.fd = CaptureFd()
 
@@ -374,84 +370,80 @@ class MessageAuthenticatorPolicyTests(unittest.TestCase):
 
         rawreply, _target = parsed.fd.sent[0]
         reply = parsed.create_reply(packet=rawreply)
-        self.assertEqual(reply.code, PacketType.AccountingResponse)
-        self.assertTrue(parsed.verify_reply(reply, rawreply=rawreply))
+        assert reply.code == PacketType.AccountingResponse
+        assert parsed.verify_reply(reply, rawreply=rawreply)
 
 
-class AcctPacketHandlingTests(unittest.TestCase):
-    def setUp(self):
+class TestAcctPacketHandling:
+    def setup_method(self):
         self.server = Server()
-        self.server.hosts["host"] = TrivialObject()
+        self.server.hosts["host"] = _TrivialObject()
         self.server.hosts["host"].secret = "supersecret"
-        self.packet = TrivialObject()
+        self.packet = _TrivialObject()
         self.packet.code = PacketType.AccountingRequest
         self.packet.source = ("host", "port")
 
-    def testHandleAcctPacketUnknownHost(self):
+    def test_handle_acct_packet_unknown_host(self):
         self.packet.source = ("stranger", "port")
-        try:
+        with pytest.raises(ServerPacketError, match="unknown host"):
             self.server._handle_acct_packet(self.packet)
-        except ServerPacketError as e:
-            self.assertTrue("unknown host" in str(e))
-        else:
-            self.fail()
 
-    def testHandleAcctPacketWrongPort(self):
+    def test_handle_acct_packet_wrong_port(self):
         self.packet.code = PacketType.AccessRequest
-        try:
+        with pytest.raises(ServerPacketError, match="port"):
             self.server._handle_acct_packet(self.packet)
-        except ServerPacketError as e:
-            self.assertTrue("port" in str(e))
-        else:
-            self.fail()
 
-    def testHandleAcctPacket(self):
+    def test_handle_acct_packet(self):
         def handle_acct_packet(self, pkt):
             self.handled = pkt
 
         hap = Server.handle_acct_packet
         Server.handle_acct_packet = handle_acct_packet
 
-        self.server._handle_acct_packet(self.packet)
-        self.assertTrue(self.server.handled is self.packet)
+        try:
+            self.server._handle_acct_packet(self.packet)
+            assert self.server.handled is self.packet
+        finally:
+            Server.handle_acct_packet = hap
 
-        Server.handle_acct_packet = hap
 
-
-class OtherTests(unittest.TestCase):
-    def setUp(self):
+class TestOther:
+    def setup_method(self):
         self.server = Server()
 
-    def tearDown(self):
+    def teardown_method(self):
         UnmockClassMethods(Server)
 
-    def testcreate_reply_packet(self):
+    def test_create_reply_packet(self):
         class TrivialPacket:
             source = object()
 
             def create_reply(self, **kw):
-                reply = TrivialObject()
+                reply = _TrivialObject()
                 reply.kw = kw
                 return reply
 
-        reply = self.server.create_reply_packet(TrivialPacket(), one="one", two="two")
-        self.assertTrue(isinstance(reply, TrivialObject))
-        self.assertTrue(reply.source is TrivialPacket.source)
-        self.assertEqual(reply.kw, dict(one="one", two="two"))
+        reply = self.server.create_reply_packet(
+            TrivialPacket(), one="one", two="two"
+        )
+        assert isinstance(reply, _TrivialObject)
+        assert reply.source is TrivialPacket.source
+        assert reply.kw == dict(one="one", two="two")
 
-    def testAuthProcessInput(self):
+    def test_auth_process_input(self):
         fd = MockFd(1)
         self.server._realauthfds = [1]
         MockClassMethod(Server, "_grab_packet")
         MockClassMethod(Server, "_handle_auth_packet")
 
         self.server._process_input(fd)
-        self.assertEqual(
-            [x[0] for x in self.server.called], ["_grab_packet", "_handle_auth_packet"]
-        )
-        self.assertEqual(self.server.called[0][1][0], fd)
+        assert [x[0] for x in self.server.called] == [
+            "_grab_packet",
+            "_handle_auth_packet",
+        ]
+        assert self.server.called[0][1][0] == fd
 
-    def testAcctProcessInput(self):
+    def test_acct_process_input(self):
         fd = MockFd(1)
         self.server._realauthfds = []
         self.server._realacctfds = [1]
@@ -459,61 +451,63 @@ class OtherTests(unittest.TestCase):
         MockClassMethod(Server, "_handle_acct_packet")
 
         self.server._process_input(fd)
-        self.assertEqual(
-            [x[0] for x in self.server.called], ["_grab_packet", "_handle_acct_packet"]
-        )
-        self.assertEqual(self.server.called[0][1][0], fd)
+        assert [x[0] for x in self.server.called] == [
+            "_grab_packet",
+            "_handle_acct_packet",
+        ]
+        assert self.server.called[0][1][0] == fd
 
 
-class ServerRunTests(unittest.TestCase):
-    def setUp(self):
+@pytest.mark.skipif(not hasattr(select, "poll"), reason="select.poll not available")
+class TestServerRun:
+    def setup_method(self):
         self.server = Server()
         self.origpoll = select.poll
         select.poll = MockPoll
 
-    def tearDown(self):
+    def teardown_method(self):
         MockPoll.results = []
         select.poll = self.origpoll
         UnmockClassMethods(Server)
 
-    def testRunInitializes(self):
+    def test_run_initializes(self):
         MockClassMethod(Server, "_prepare_sockets")
-        self.assertRaises(MockFinished, self.server.run)
-        self.assertEqual(self.server.called, [("_prepare_sockets", (), {})])
-        self.assertTrue(isinstance(self.server._fdmap, dict))
-        self.assertTrue(isinstance(self.server._poll, MockPoll))
+        with pytest.raises(MockFinished):
+            self.server.run()
+        assert self.server.called == [("_prepare_sockets", (), {})]
+        assert isinstance(self.server._fdmap, dict)
+        assert isinstance(self.server._poll, MockPoll)
 
-    def testRunIgnoresPollErrors(self):
+    def test_run_ignores_poll_errors(self):
         self.server.authfds = [MockFd()]
         MockPoll.results = [(0, select.POLLERR)]
-        self.assertRaises(MockFinished, self.server.run)
+        with pytest.raises(MockFinished):
+            self.server.run()
 
-    def testRunIgnoresServerPacketErrors(self):
+    def test_run_ignores_server_packet_errors(self):
         def RaisePacketError(self, fd):
             raise ServerPacketError
 
         MockClassMethod(Server, "_process_input", RaisePacketError)
         self.server.authfds = [MockFd()]
         MockPoll.results = [(0, select.POLLIN)]
-        self.assertRaises(MockFinished, self.server.run)
+        with pytest.raises(MockFinished):
+            self.server.run()
 
-    def testRunIgnoresPacketErrors(self):
+    def test_run_ignores_packet_errors(self):
         def RaisePacketError(self, fd):
             raise PacketError
 
         MockClassMethod(Server, "_process_input", RaisePacketError)
         self.server.authfds = [MockFd()]
         MockPoll.results = [(0, select.POLLIN)]
-        self.assertRaises(MockFinished, self.server.run)
+        with pytest.raises(MockFinished):
+            self.server.run()
 
-    def testRunRunsProcessInput(self):
+    def test_run_runs_process_input(self):
         MockClassMethod(Server, "_process_input")
         self.server.authfds = fd = [MockFd()]
         MockPoll.results = [(0, select.POLLIN)]
-        self.assertRaises(MockFinished, self.server.run)
-        self.assertEqual(self.server.called, [("_process_input", (fd[0],), {})])
-
-
-if not hasattr(select, "poll"):
-    del SocketTests
-    del ServerRunTests
+        with pytest.raises(MockFinished):
+            self.server.run()
+        assert self.server.called == [("_process_input", (fd[0],), {})]

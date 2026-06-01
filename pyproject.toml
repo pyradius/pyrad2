@@ -40,6 +40,7 @@ Changelog = "https://github.com/nicholasamorim/pyrad2/releases"
 dev = [
     "mypy>=2.1.0",
     "pytest>=9.0.3",
+    "pytest-asyncio>=1.0.0",
     "pytest-cov>=7.1.0",
     "pytest-sugar>=1.1.1",
     "ruff>=0.15.3",
@@ -65,3 +66,9 @@ include = [
     "/README.md",
     "/CHANGELOG.md",
 ]
+
+[tool.pytest.ini_options]
+# ``asyncio_mode = "auto"`` lets bare ``async def test_*`` functions run as
+# coroutines without a per-test ``@pytest.mark.asyncio`` decorator.
+asyncio_mode = "auto"
+testpaths = ["tests"]
