@@ -1373,12 +1373,23 @@ set <code>enable_coa=False</code> or <code>enable_disconnect=False</code>:</p>
 </span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="message-authenticator-policy">Message-Authenticator policy</h2>
-<p>PyRad2 validates <code>Message-Authenticator</code> whenever the attribute is present. By
-default, packets containing <code>EAP-Message</code> must include a valid
-<code>Message-Authenticator</code>, while non-EAP packets remain compatible with older
-clients.</p>
-<p>To require <code>Message-Authenticator</code> on every incoming packet, enable
-<code>require_message_authenticator</code>:</p>
+<p>PyRad2 validates <code>Message-Authenticator</code> whenever the attribute is present.
+RadSec wraps RADIUS in TLS, so off-path BlastRADIUS (CVE-2024-3596) forgery
+is already impossible by construction — TLS authenticates origin and
+integrity of every byte. <code>RadSecServer</code> therefore defaults
+<code>require_message_authenticator=False</code>, in contrast to the UDP <code>Server</code> /
+<code>ServerAsync</code> classes which default it to <code>True</code>.</p>
+<p>By default the only <code>Message-Authenticator</code> checks that fire on RadSec are:</p>
+<ul>
+<li>packets containing <code>EAP-Message</code> must carry a valid <code>Message-Authenticator</code>
+  (RFC 3579 §3.2),</li>
+<li><code>Status-Server</code> requests must carry a valid <code>Message-Authenticator</code>
+  (RFC 5997 §3),</li>
+<li>and any other packet that <em>does</em> include the attribute is verified.</li>
+</ul>
+<p>If you want strict parity with UDP deployments — for example because the
+same handler code services both transports and you want a single audit
+story — enable the flag explicitly:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">server</span> <span class="o">=</span> <span class="n">RadSecServer</span><span class="p">(</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">hosts</span><span class="o">=</span><span class="n">hosts</span><span class="p">,</span>
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">dictionary</span><span class="o">=</span><span class="n">dictionary</span><span class="p">,</span>
@@ -1388,9 +1399,12 @@ clients.</p>
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">require_message_authenticator</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 </span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="p">)</span>
 </span></code></pre></div>
-<p>Replies automatically include <code>Message-Authenticator</code> when the request included
-one, when <code>require_message_authenticator=True</code>, or when the reply contains
-<code>EAP-Message</code>.</p>
+<p>Replies automatically include <code>Message-Authenticator</code> when the request was
+an <code>Access-Request</code> and <code>require_message_authenticator=True</code>, when the
+request already carried one (mirror), or when the reply contains
+<code>EAP-Message</code>. Replies to Accounting / CoA / Disconnect requests are not
+augmented — their Response Authenticator MD5 already authenticates the
+body and shared secret.</p>
 <p>RadSec servers answer RFC 5997 Status-Server health checks directly with
 <code>Access-Accept</code>. Status-Server requests must include a valid
 <code>Message-Authenticator</code> and do not invoke normal authentication, accounting, or

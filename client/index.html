@@ -1461,16 +1461,20 @@
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">reply</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">send_packet</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="message-authenticator">Message-Authenticator</h2>
-<p>pyrad2 validates <code>Message-Authenticator</code> whenever a reply includes it.</p>
+<p>By default (<code>enforce_ma=True</code>) pyrad2 stamps <code>Message-Authenticator</code> onto every outgoing <code>Access-Request</code> and refuses any <code>Access-Accept</code> / <code>Reject</code> / <code>Challenge</code> reply that doesn't carry one. This mitigates <a href="https://www.blastradius.fail/">BlastRADIUS (CVE-2024-3596)</a> without any extra wiring on your side.</p>
+<p>Scope of the default:</p>
 <ul>
-<li>If you build an <code>Access-Request</code> with <code>EAP-Message</code>, the client automatically adds <code>Message-Authenticator</code> before sending. You don't need to do anything.</li>
-<li>Pass <code>enforce_ma=True</code> to require <strong>every</strong> reply to include a valid <code>Message-Authenticator</code>:</li>
+<li><code>Access-Request</code> gets <code>Message-Authenticator</code> added before send; the matching <code>Access-*</code> reply is required to carry one too.</li>
+<li>Replies to <code>Accounting-Request</code>, <code>CoA-Request</code>, and <code>Disconnect-Request</code> aren't required to include <code>Message-Authenticator</code> — their Response Authenticator MD5 already authenticates the body and shared secret.</li>
+<li><code>Status-Server</code> (RFC 5997) always carries <code>Message-Authenticator</code>, regardless of the flag.</li>
+<li>If you build an <code>Access-Request</code> with <code>EAP-Message</code>, <code>Message-Authenticator</code> is added automatically — same as before.</li>
 </ul>
+<p>If you're talking to a legacy server that can't process the attribute, opt out explicitly:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">client</span> <span class="o">=</span> <span class="n">ClientAsync</span><span class="p">(</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">server</span><span class="o">=</span><span class="s2">&quot;localhost&quot;</span><span class="p">,</span>
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">secret</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;...&quot;</span><span class="p">,</span>
 </span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="nb">dict</span><span class="o">=</span><span class="n">Dictionary</span><span class="p">(</span><span class="s2">&quot;dictionary&quot;</span><span class="p">),</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">enforce_ma</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">enforce_ma</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># legacy peer; drops BlastRADIUS mitigation</span>
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="status-server-health-checks">Status-Server health checks</h2>

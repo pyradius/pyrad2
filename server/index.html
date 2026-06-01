@@ -1734,12 +1734,16 @@
 <p>RadSec runs over TCP/TLS, where the transport handles retransmission of lost segments. The dedup cache is not wired into <code>RadSecServer</code>.</p>
 </div>
 <h2 id="message-authenticator">Message-Authenticator</h2>
-<p>pyrad2 validates <code>Message-Authenticator</code> whenever it's present. By default:</p>
+<p>pyrad2 validates <code>Message-Authenticator</code> whenever it's present and, by default, requires it on every incoming <code>Access-Request</code>. This mitigates <a href="https://www.blastradius.fail/">BlastRADIUS (CVE-2024-3596)</a> out of the box — an off-path attacker who can spoof source IP can no longer forge an <code>Access-Accept</code>.</p>
+<p>Scope of the default (<code>require_message_authenticator=True</code>):</p>
 <ul>
-<li><strong>Packets with <code>EAP-Message</code> must include a valid <code>Message-Authenticator</code></strong> (RFC requirement).</li>
-<li>Other packets remain compatible with older clients that don't send one.</li>
+<li><strong><code>Access-Request</code> must include a valid <code>Message-Authenticator</code></strong> — incoming packets without one are dropped before reaching your handler.</li>
+<li><strong>Access replies (<code>Access-Accept</code> / <code>Reject</code> / <code>Challenge</code>) automatically get <code>Message-Authenticator</code></strong> before they go on the wire.</li>
+<li><strong><code>Accounting-Request</code>, <code>CoA-Request</code>, <code>Disconnect-Request</code> (and their replies) are unaffected</strong> — those codes carry a Request/Response Authenticator MD5 over the body and shared secret, so the body is already integrity-protected.</li>
+<li><strong>Packets with <code>EAP-Message</code> must include a valid <code>Message-Authenticator</code></strong> (RFC 3579 §3.2).</li>
+<li><strong><code>Status-Server</code> must include a valid <code>Message-Authenticator</code></strong> (RFC 5997 §3) — independent of the flag.</li>
 </ul>
-<p>To require it on <strong>every</strong> incoming packet, pass <code>require_message_authenticator=True</code> when constructing <code>Server</code>, <code>ServerAsync</code>, or <code>RadSecServer</code>.</p>
+<p>To bridge a legacy NAS that doesn't emit the attribute, set <code>require_message_authenticator=False</code> when constructing <code>Server</code> or <code>ServerAsync</code>. <code>RadSecServer</code> defaults to <code>False</code> because TLS already authenticates origin and integrity (off-path forgery is impossible by construction); flip it to <code>True</code> only if you need strict parity with UDP deployments.</p>
 <h2 id="radsec-radius-over-tls">RadSec - RADIUS over TLS</h2>
 <div class="admonition info">
 <p class="admonition-title">Status</p>
