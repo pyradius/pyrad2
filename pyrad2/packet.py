@@ -3,6 +3,7 @@ import hmac
 import os
 import secrets
 import struct
+import threading
 from collections import OrderedDict
 from typing import Any, Hashable, Optional, Union, Sequence, TypeVar
 
@@ -89,6 +90,13 @@ random_generator = secrets.SystemRandom()
 
 # Current ID
 CURRENT_ID = random_generator.randrange(1, 255)
+# Guards the global ``CURRENT_ID`` counter so two threads constructing
+# ``Packet`` instances concurrently can't read+increment the same
+# value and end up with colliding identifiers. Per-transport counters
+# (e.g. ``DatagramProtocolClient.create_id``) bypass this entirely and
+# track their own in-flight set, which is the correct architecture for
+# any caller managing >1 outstanding request.
+_CURRENT_ID_LOCK = threading.Lock()
 
 
 def _md5_keystream_xor(secret: bytes, prev: bytes, block: bytes) -> bytes:
@@ -2077,15 +2085,20 @@ class CoAPacket(Packet):
 
 
 def create_id() -> int:
-    """Generate a packet ID.
+    """Generate a packet identifier as an 8-bit integer.
 
-    :return: packet ID
-    :rtype:  8 bit integer
+    Best-effort uniqueness across a single process. Callers that
+    manage multiple in-flight requests on the same source port (the
+    only scope in which RFC 2865 actually requires Identifier
+    uniqueness) should track their own free/busy set instead of
+    relying on this global — see ``DatagramProtocolClient.create_id``
+    for the per-transport approach.
     """
     global CURRENT_ID
 
-    CURRENT_ID = (CURRENT_ID + 1) % 256
-    return CURRENT_ID
+    with _CURRENT_ID_LOCK:
+        CURRENT_ID = (CURRENT_ID + 1) % 256
+        return CURRENT_ID
 
 
 def parse_packet(

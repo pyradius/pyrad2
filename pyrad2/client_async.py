@@ -10,6 +10,7 @@ from loguru import logger
 from pyrad2 import eap
 from pyrad2.constants import PacketType
 from pyrad2.dictionary import Dictionary
+from pyrad2.exceptions import IdentifierExhausted
 from pyrad2.packet import (
     AcctPacket,
     AuthPacket,
@@ -109,7 +110,9 @@ class DatagramProtocolClient(asyncio.Protocol):
 
     def send_packet(self, packet: PacketImplementation, future: asyncio.Future):
         if packet.id in self.pending_requests:
-            raise Exception("Packet with id %d already present" % packet.id)
+            raise IdentifierExhausted(
+                "Packet with id %d already in flight" % packet.id
+            )
 
         # Store packet on pending requests map
         self.pending_requests[packet.id] = {
@@ -196,8 +199,26 @@ class DatagramProtocolClient(asyncio.Protocol):
             self.timeout_future = None
 
     def create_id(self) -> int:
-        self.packet_id = (self.packet_id + 1) % 256
-        return self.packet_id
+        """Return the next free RADIUS Identifier for this transport.
+
+        Scans forward from the last-used id looking for a slot that
+        isn't already in ``pending_requests``. Raises
+        ``IdentifierExhausted`` if all 256 slots are pending — RFC 2865
+        §3 caps the field at one octet, so a single (source IP, port)
+        flow can't carry more than 256 simultaneous outstanding
+        requests. Callers that hit this should wait for an in-flight
+        request to complete, open a second transport for more capacity,
+        or queue.
+        """
+        start = self.packet_id
+        for offset in range(1, 257):
+            candidate = (start + offset) % 256
+            if candidate not in self.pending_requests:
+                self.packet_id = candidate
+                return candidate
+        raise IdentifierExhausted(
+            "All 256 RADIUS Identifier slots are in flight on this transport"
+        )
 
     def __str__(self) -> str:
         return "DatagramProtocolClient(server?=%s, port=%d)" % (self.server, self.port)

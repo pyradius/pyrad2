@@ -510,6 +510,103 @@ class SendPacketRoutingTests(unittest.TestCase):
             client.send_packet(pkt)
 
 
+class IdentifierAllocationTests(unittest.TestCase):
+    """Regression cover for H1/H10: per-transport id scan + typed exhaustion."""
+
+    def test_create_id_skips_in_flight_slots(self):
+        # Seed the counter at 41 and mark 42 in-flight; the next id
+        # should be 43, not the legacy ``(41+1) % 256 == 42`` collision.
+        proto = _make_protocol()
+        proto.packet_id = 41
+        proto.pending_requests[42] = {"placeholder": True}
+
+        self.assertEqual(proto.create_id(), 43)
+
+    def test_create_id_wraps_through_the_full_id_space(self):
+        # Block every id except 7. The scan must wrap from 255 → 0
+        # and land on the single free slot.
+        proto = _make_protocol()
+        proto.packet_id = 100
+        for i in range(256):
+            if i != 7:
+                proto.pending_requests[i] = {"placeholder": True}
+
+        self.assertEqual(proto.create_id(), 7)
+
+    def test_create_id_raises_identifier_exhausted_when_full(self):
+        from pyrad2.exceptions import IdentifierExhausted
+
+        proto = _make_protocol()
+        proto.packet_id = 0
+        for i in range(256):
+            proto.pending_requests[i] = {"placeholder": True}
+
+        with self.assertRaises(IdentifierExhausted):
+            proto.create_id()
+
+    def test_send_packet_raises_identifier_exhausted_on_collision(self):
+        # Previously raised a bare ``Exception``; callers couldn't tell the
+        # exhaustion case apart from a transport failure. Now typed.
+        from pyrad2.exceptions import IdentifierExhausted
+
+        proto = _make_protocol()
+        proto.pending_requests[7] = {"placeholder": True}
+
+        pkt = MagicMock()
+        pkt.id = 7
+        pkt.request_packet.return_value = b"raw"
+
+        with self.assertRaises(IdentifierExhausted):
+            proto.send_packet(pkt, MagicMock())
+
+
+class ModuleLevelCurrentIdThreadSafetyTests(unittest.TestCase):
+    """The module-level ``packet.create_id`` is the back-compat path for
+    callers constructing ``Packet`` instances without a transport. It now
+    serializes its increment so two threads can't read+write the same
+    counter and end up with colliding ids.
+    """
+
+    def test_create_id_under_thread_contention_produces_unique_increments(self):
+        import threading
+        from pyrad2 import packet as packet_mod
+
+        # 256 concurrent callers, each requesting one id. Under a working
+        # lock the sequence is a permutation of 0..255 — every value
+        # appears exactly once. A racing read-modify-write would produce
+        # duplicates as two threads observe the same pre-increment value.
+        with packet_mod._CURRENT_ID_LOCK:
+            packet_mod.CURRENT_ID = 0
+
+        produced: list[int] = []
+        produced_lock = threading.Lock()
+        thread_count = 256
+
+        # All threads block on this gate so they actually race rather than
+        # serializing on the import path.
+        gate = threading.Event()
+
+        def worker():
+            gate.wait()
+            value = packet_mod.create_id()
+            with produced_lock:
+                produced.append(value)
+
+        threads = [threading.Thread(target=worker) for _ in range(thread_count)]
+        for t in threads:
+            t.start()
+        gate.set()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(len(produced), thread_count)
+        self.assertEqual(
+            sorted(produced),
+            list(range(thread_count)),
+            "lock must serialize the increment so every id is unique",
+        )
+
+
 # Quiet unused-import linters: packet is re-exported for downstream
 # patching in some test variants.
 _ = packet

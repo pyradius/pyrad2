@@ -26,6 +26,18 @@ class PacketError(RadiusException):
     pass
 
 
+class IdentifierExhausted(RadiusException):
+    """All 256 RADIUS Identifier slots on a single (source IP, port) flow
+    are currently in flight.
+
+    RFC 2865 §3 caps the Identifier field at one octet. Callers that hit
+    this need to either wait for an in-flight request to complete, open
+    a second source port to get a fresh 256-id space, or queue.
+    """
+
+    pass
+
+
 class ParseError(RadiusException):
     """Exception raised for errors while parsing RADIUS dictionary files.
 
