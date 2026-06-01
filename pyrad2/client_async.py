@@ -138,11 +138,8 @@ class DatagramProtocolClient(asyncio.Protocol):
             socket.getsockname()[1],
         )
 
-        # loop = asyncio.get_event_loop()
-        # asyncio.set_event_loop(loop=asyncio.get_event_loop())
         # Start asynchronous timer handler
         self.timeout_future = asyncio.ensure_future(self.__timeout_handler__())
-        # asyncio.set_event_loop(loop=pre_loop)
 
     def error_received(self, exc: Exception) -> None:
         logger.error("[{}:{}] Error received: {}", self.server, self.port, exc)
@@ -291,7 +288,7 @@ class ClientAsync:
         if not enable_acct and not enable_auth and not enable_coa:
             raise Exception("No transports selected")
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         if enable_acct and not self.protocol_acct:
             self.protocol_acct = DatagramProtocolClient(
                 self.server,
@@ -474,7 +471,7 @@ class ClientAsync:
         if pkt is None:
             pkt = self.create_status_packet(port=port)
 
-        ans: asyncio.Future = asyncio.Future(loop=asyncio.get_event_loop())
+        ans: asyncio.Future = asyncio.get_running_loop().create_future()
         self._prepare_outgoing_packet(pkt)
         protocol.send_packet(pkt, ans)
         return ans
@@ -505,7 +502,7 @@ class ClientAsync:
                 raise Exception("Transport not initialized")
             return self._send_auth_packet(pkt)
 
-        ans: asyncio.Future = asyncio.Future(loop=asyncio.get_event_loop())
+        ans: asyncio.Future = asyncio.get_running_loop().create_future()
         self._prepare_outgoing_packet(pkt)
 
         if isinstance(pkt, AcctPacket):
@@ -536,10 +533,11 @@ class ClientAsync:
         if pkt.auth_type == "eap-md5":
             eap.inject_eap_identity(pkt)
 
-        outer: asyncio.Future = asyncio.Future(loop=asyncio.get_event_loop())
+        loop = asyncio.get_running_loop()
+        outer: asyncio.Future = loop.create_future()
         self._prepare_outgoing_packet(pkt)
 
-        first: asyncio.Future = asyncio.Future(loop=asyncio.get_event_loop())
+        first: asyncio.Future = loop.create_future()
         protocol.send_packet(pkt, first)
 
         def _on_first_reply(fut: asyncio.Future) -> None:
@@ -571,9 +569,7 @@ class ClientAsync:
                 pkt.authenticator = pkt.create_authenticator()
                 self._prepare_outgoing_packet(pkt)
 
-                second: asyncio.Future = asyncio.Future(
-                    loop=asyncio.get_event_loop()
-                )
+                second: asyncio.Future = loop.create_future()
                 protocol.send_packet(pkt, second)
 
                 def _on_second_reply(fut2: asyncio.Future) -> None:

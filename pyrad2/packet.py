@@ -90,6 +90,20 @@ random_generator = secrets.SystemRandom()
 # Current ID
 CURRENT_ID = random_generator.randrange(1, 255)
 
+
+def _md5_keystream_xor(secret: bytes, prev: bytes, block: bytes) -> bytes:
+    """One round of the RFC 2865 §5.2 keystream: ``MD5(secret + prev) XOR block``.
+
+    ``block`` must be exactly 16 bytes — every caller pads up-front. The
+    int-based XOR is a single CPython op, in contrast to the legacy
+    ``bytes((hash[i] ^ block[i],))`` loop that allocates a one-byte
+    ``bytes`` object per index and concatenates in O(N²).
+    """
+    digest = hashlib.md5(secret + prev).digest()
+    return (int.from_bytes(digest, "big") ^ int.from_bytes(block, "big")).to_bytes(
+        16, "big"
+    )
+
 # Used for Typing to indicate you accept only the subclasses
 PacketImplementation = Union["AuthPacket", "AcctPacket", "CoAPacket", "StatusPacket"]
 ReplyPacketT = TypeVar("ReplyPacketT", bound="Packet")
@@ -1488,21 +1502,19 @@ class Packet(OrderedDict):
                 OrderedDict.__setitem__(self, code, [b"".join(chunks)])
 
     def _salt_en_decrypt(self, data, salt):
-        result = b""
-
         if self.request_authenticator is not None:
             last = self.request_authenticator + salt
         else:
             last = self.authenticator + salt
 
-        while data:
-            hash = hashlib.md5(self.secret + last).digest()
-            for i in range(16):
-                result += bytes((hash[i] ^ data[i],))
-
-            last = result[-16:]
-            data = data[16:]
-        return result
+        out = bytearray()
+        for offset in range(0, len(data), 16):
+            block = _md5_keystream_xor(self.secret, last, data[offset : offset + 16])
+            out += block
+            # Chain on the previous output (matches the legacy
+            # ``last = result[-16:]`` behaviour).
+            last = block
+        return bytes(out)
 
     def salt_crypt(self, value) -> bytes:
         """SaltEncrypt
@@ -1763,20 +1775,19 @@ class AuthPacket(Packet):
         if self.radius_version == RadiusVersion.V1_1:
             # RFC 9765 §5.1.1: User-Password is plain "string" over TLS.
             return password.decode("utf-8", errors="ignore")
-        buf = password
-        pw = b""
 
+        pw = bytearray()
         last = self.authenticator
-        while buf:
-            hash = hashlib.md5(self.secret + last).digest()  # type: ignore
-            for i in range(16):
-                pw += bytes((hash[i] ^ buf[i],))
-            (last, buf) = (buf[:16], buf[16:])
+        for offset in range(0, len(password), 16):
+            block = password[offset : offset + 16]
+            pw += _md5_keystream_xor(self.secret, last, block)  # type: ignore[arg-type]
+            # Decrypt chains on the previous *ciphertext* block, not the
+            # previous plaintext output (see the encrypt counterpart).
+            last = block
 
         # This is safe even with UTF-8 encoding since no valid encoding of UTF-8
         # (other than encoding U+0000 NULL) will produce a bytestream containing 0x00 byte.
-        while pw.endswith(b"\x00"):
-            pw = pw[:-1]
+        pw = pw.rstrip(b"\x00")
 
         # If the shared secret with the client is not the same, then de-obfuscating the password
         # field may yield illegal UTF-8 bytes. Therefore, in order not to provoke an Exception here
@@ -1814,17 +1825,17 @@ class AuthPacket(Packet):
         if len(password) % 16 != 0:
             buf += b"\x00" * (16 - (len(password) % 16))
 
-        result = b""
-
+        out = bytearray()
         last = self.authenticator
-        while buf:
-            hash = hashlib.md5(self.secret + last).digest()
-            for i in range(16):
-                result += bytes((hash[i] ^ buf[i],))
-            last = result[-16:]
-            buf = buf[16:]
+        for offset in range(0, len(buf), 16):
+            block = _md5_keystream_xor(
+                self.secret, last, buf[offset : offset + 16]  # type: ignore[arg-type]
+            )
+            out += block
+            # Encrypt chains on the previous output ciphertext block.
+            last = block
 
-        return result
+        return bytes(out)
 
     def verify_chap_passwd(self, userpwd: bytes) -> bool:
         """Verify RADIUS ChapPasswd

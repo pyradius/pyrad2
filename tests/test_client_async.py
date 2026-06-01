@@ -303,7 +303,15 @@ class EapMd5AsyncTests(unittest.TestCase):
 
         client.protocol_auth.send_packet.side_effect = fake_send
 
-        ans = client.send_packet(pkt)
+        # ``_send_auth_packet`` now uses ``get_running_loop()``; wrap the
+        # call in a tiny coroutine so the test runs inside a real loop.
+        ans_holder: dict[str, asyncio.Future] = {}
+
+        async def _go():
+            ans_holder["fut"] = client.send_packet(pkt)
+
+        asyncio.run(_go())
+        ans = ans_holder["fut"]
 
         self.assertEqual(len(captured), 1)
         # EAP-Message attribute (79) must now hold an EAP-Identity Response.
@@ -455,11 +463,20 @@ class SendPacketRoutingTests(unittest.TestCase):
         client.protocol_coa.create_id.side_effect = iter(range(200, 300))
         return client
 
+    def _run_send_packet(self, client, pkt) -> None:
+        """``send_packet`` builds a ``Future`` via ``get_running_loop()``;
+        wrap the call so the test executes inside a real event loop."""
+
+        async def _go():
+            client.send_packet(pkt)
+
+        asyncio.run(_go())
+
     def test_acct_packet_uses_acct_protocol(self):
         client = self._make_client()
         pkt = AcctPacket(id=1, secret=b"secret", dict=self.dictionary)
 
-        client.send_packet(pkt)
+        self._run_send_packet(client, pkt)
 
         client.protocol_acct.send_packet.assert_called_once()
         client.protocol_coa.send_packet.assert_not_called()
@@ -469,7 +486,7 @@ class SendPacketRoutingTests(unittest.TestCase):
         client = self._make_client()
         pkt = CoAPacket(id=1, secret=b"secret", dict=self.dictionary)
 
-        client.send_packet(pkt)
+        self._run_send_packet(client, pkt)
 
         client.protocol_coa.send_packet.assert_called_once()
         client.protocol_acct.send_packet.assert_not_called()
@@ -479,7 +496,7 @@ class SendPacketRoutingTests(unittest.TestCase):
         client = self._make_client()
         pkt = StatusPacket(id=1, secret=b"secret", dict=self.dictionary)
 
-        client.send_packet(pkt)
+        self._run_send_packet(client, pkt)
 
         client.protocol_auth.send_packet.assert_called_once()
         client.protocol_acct.send_packet.assert_not_called()
