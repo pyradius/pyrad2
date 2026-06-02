@@ -1291,7 +1291,7 @@
 <p><code>PYRAD2_TRACE</code> works on any script - scenarios, examples, or your own code - and costs nothing when off.</p>
 <div class="admonition tip">
 <p class="admonition-title">Scenarios vs examples</p>
-<p>Scenarios are <strong>runnable explanations</strong> - don't edit them. When you're ready to write your own integration, copy from <a href="https://github.com/nicholasamorim/pyrad2/tree/master/examples"><code>examples/</code></a> instead: those are operational scripts (one terminal per process) designed to be cribbed.</p>
+<p>Scenarios are <strong>runnable explanations</strong> - don't edit them. When you're ready to write your own integration, copy from <a href="https://github.com/pyradius/pyrad2/tree/master/examples"><code>examples/</code></a> instead: those are operational scripts (one terminal per process) designed to be cribbed.</p>
 </div>
 <h2 id="4-load-a-dictionary">4. Load a dictionary</h2>
 <p>Before you can build packets, pyrad2 needs a dictionary to know what <code>User-Name</code> <em>means</em>. Dictionaries are plain text files with one definition per line:</p>
@@ -1301,8 +1301,8 @@
 </span></code></pre></div>
 <p>Two reference dictionaries are included in the repo:</p>
 <ul>
-<li><a href="https://github.com/nicholasamorim/pyrad2/blob/master/examples/dictionary"><code>examples/dictionary</code></a> - a working starter dictionary</li>
-<li><a href="https://github.com/nicholasamorim/pyrad2/blob/master/examples/dictionary.freeradius"><code>examples/dictionary.freeradius</code></a> - FreeRADIUS vendor-specific attributes</li>
+<li><a href="https://github.com/pyradius/pyrad2/blob/master/examples/dictionary"><code>examples/dictionary</code></a> - a working starter dictionary</li>
+<li><a href="https://github.com/pyradius/pyrad2/blob/master/examples/dictionary.freeradius"><code>examples/dictionary.freeradius</code></a> - FreeRADIUS vendor-specific attributes</li>
 </ul>
 <p>Drop one (or both) into your project, then load it:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.dictionary</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dictionary</span>

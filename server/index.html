@@ -1587,7 +1587,7 @@
 <p>That's a working RADIUS server. The next sections explain what's happening and how to make it useful.</p>
 <div class="admonition tip">
 <p class="admonition-title">Sync or async?</p>
-<p>The example above is async - recommended for new code. A synchronous <code>Server</code> class exists in <code>pyrad2.server</code> for legacy compatibility, but sync support <strong>may be dropped in a future release</strong>. Use <a href="https://github.com/nicholasamorim/pyrad2/blob/master/examples/server_async.py"><code>server_async.py</code></a> as your starting template.</p>
+<p>The example above is async - recommended for new code. A synchronous <code>Server</code> class exists in <code>pyrad2.server</code> for legacy compatibility, but sync support <strong>may be dropped in a future release</strong>. Use <a href="https://github.com/pyradius/pyrad2/blob/master/examples/server_async.py"><code>server_async.py</code></a> as your starting template.</p>
 </div>
 <h2 id="handling-requests">Handling requests</h2>
 <p>Every handler receives:</p>
@@ -1793,13 +1793,13 @@
 <p>When the server is ready you'll see:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>RADSEC Server with mutual TLS running on (&#39;0.0.0.0&#39;, 2083)
 </span></code></pre></div>
-<p>A full example lives in <a href="https://github.com/nicholasamorim/pyrad2/blob/master/examples/server_radsec.py"><code>examples/server_radsec.py</code></a>. Test certificates ship in <a href="https://github.com/nicholasamorim/pyrad2/blob/master/examples/certs/"><code>examples/certs/</code></a>.</p>
+<p>A full example lives in <a href="https://github.com/pyradius/pyrad2/blob/master/examples/server_radsec.py"><code>examples/server_radsec.py</code></a>. Test certificates ship in <a href="https://github.com/pyradius/pyrad2/blob/master/examples/certs/"><code>examples/certs/</code></a>.</p>
 <div class="admonition note">
 <p class="admonition-title">Async only</p>
 <p>There is no sync RadSec server.</p>
 </div>
 <h3 id="health-checking-a-radsec-server">Health-checking a RadSec server</h3>
-<p>Status-Server health checks reuse the same TLS/TCP connection as everything else. Use <a href="https://github.com/nicholasamorim/pyrad2/blob/master/examples/status_radsec.py"><code>examples/status_radsec.py</code></a> - the UDP <code>status.py</code> script can't reach a RadSec server.</p>
+<p>Status-Server health checks reuse the same TLS/TCP connection as everything else. Use <a href="https://github.com/pyradius/pyrad2/blob/master/examples/status_radsec.py"><code>examples/status_radsec.py</code></a> - the UDP <code>status.py</code> script can't reach a RadSec server.</p>
 <h2 id="radius11-rfc-9765">RADIUS/1.1 (RFC 9765)</h2>
 <div class="admonition warning">
 <p class="admonition-title">Status</p>
