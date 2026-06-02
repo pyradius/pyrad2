@@ -73,12 +73,12 @@ jobs:
             --cov-report=term \
             --cov-report=xml \
             --cov-fail-under=80
-      - name: Upload coverage to Codecov
-        # ``continue-on-error`` so a transient Codecov hiccup doesn't fail
-        # the build; the coverage gate above is the hard floor.
-        if: matrix.python-version == '3.12'
-        continue-on-error: true
-        uses: codecov/codecov-action@v4
-        with:
-          files: coverage.xml
-          fail_ci_if_error: false
+      # - name: Upload coverage to Codecov
+      #   # ``continue-on-error`` so a transient Codecov hiccup doesn't fail
+      #   # the build; the coverage gate above is the hard floor.
+      #   if: matrix.python-version == '3.12'
+      #   continue-on-error: true
+      #   uses: codecov/codecov-action@v4
+      #   with:
+      #     files: coverage.xml
+      #     fail_ci_if_error: false
