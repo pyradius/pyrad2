@@ -1104,6 +1104,86 @@ class TestNestedExtendedTlv:
             pkt._pkt_encode_attributes()
 
 
+class TestFreeRADIUSExtensions:
+    """FreeRADIUS dict extensions: uintN type aliases, virtual, array."""
+
+    def _make_packet(self, dict_source: str):
+        return packet.Packet(
+            id=0,
+            secret=b"secret",
+            authenticator=b"0123456789ABCDEF",
+            dict=Dictionary(StringIO(dict_source)),
+        )
+
+    def test_uint_aliases_normalise_to_native_types(self):
+        d = Dictionary(
+            StringIO(
+                "ATTRIBUTE A-Byte    1 uint8\n"
+                "ATTRIBUTE A-Short   2 uint16\n"
+                "ATTRIBUTE A-Int     3 uint32\n"
+                "ATTRIBUTE A-Long    4 uint64\n"
+                "ATTRIBUTE A-Signed  5 int32\n"
+            )
+        )
+        # Aliases should land as the canonical pyrad2 type tokens so
+        # the rest of the codec doesn't have to know they exist.
+        assert d.attributes["A-Byte"].type == "byte"
+        assert d.attributes["A-Short"].type == "short"
+        assert d.attributes["A-Int"].type == "integer"
+        assert d.attributes["A-Long"].type == "integer64"
+        assert d.attributes["A-Signed"].type == "signed"
+
+    def test_virtual_attribute_is_omitted_from_wire(self):
+        pkt = self._make_packet(
+            "ATTRIBUTE Real-Attr     1   string\n"
+            "ATTRIBUTE Virtual-Attr  2   string virtual\n"
+        )
+        pkt.add_attribute("Real-Attr", "visible")
+        pkt.add_attribute("Virtual-Attr", "hidden")
+
+        encoded = pkt._pkt_encode_attributes()
+        # Only the real attribute should appear on the wire.
+        assert encoded == b"\x01\x09visible"
+
+    def test_array_attribute_packs_multiple_values_into_one_avp(self):
+        pkt = self._make_packet("ATTRIBUTE Router-Addr 3 ipaddr array\n")
+        pkt.add_attribute("Router-Addr", "10.0.0.1")
+        pkt.add_attribute("Router-Addr", "10.0.0.2")
+        pkt.add_attribute("Router-Addr", "10.0.0.3")
+
+        encoded = pkt._pkt_encode_attributes()
+        # One AVP: [code=3][len=14][3 × 4-byte IPv4]
+        assert encoded == (
+            b"\x03\x0e"
+            + b"\x0a\x00\x00\x01"
+            + b"\x0a\x00\x00\x02"
+            + b"\x0a\x00\x00\x03"
+        )
+
+    def test_array_attribute_roundtrips(self):
+        source = "ATTRIBUTE Router-Addr 3 ipaddr array\n"
+        send = self._make_packet(source)
+        send.add_attribute("Router-Addr", "10.0.0.1")
+        send.add_attribute("Router-Addr", "10.0.0.2")
+        wire = send._pkt_encode_attributes()
+
+        recv = self._make_packet(source)
+        header = struct.pack("!BBH", 1, 1, 20 + len(wire)) + b"0123456789ABCDEF"
+        recv.decode_packet(header + wire)
+
+        # Decoder should have split the single 8-byte payload into two
+        # 4-byte values so reading by name returns the same list.
+        assert recv["Router-Addr"] == ["10.0.0.1", "10.0.0.2"]
+
+    def test_single_value_array_is_indistinguishable_from_non_array(self):
+        # Sanity check: one value packed as an array still emits exactly
+        # one AVP with the value in it — the array flag is a noop for N=1.
+        pkt = self._make_packet("ATTRIBUTE Router-Addr 3 ipaddr array\n")
+        pkt.add_attribute("Router-Addr", "10.0.0.7")
+        encoded = pkt._pkt_encode_attributes()
+        assert encoded == b"\x03\x06\x0a\x00\x00\x07"
+
+
 class TestLongExtendedAttribute:
     """RFC 6929 long-extended attributes (245-246), with fragmentation."""
 

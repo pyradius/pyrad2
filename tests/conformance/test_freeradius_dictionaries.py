@@ -43,17 +43,6 @@ _REASONS = {
         "VSAs, originally for WiMAX) — pyrad2's VSA format parser only "
         "supports the standard (type_len, len_len) pair"
     ),
-    "fr-extension-types": (
-        "uses FreeRADIUS-specific type aliases / attribute flags "
-        "(``uint16``, ``virtual``, ``array``, …) that aren't part of "
-        "the RFC 6929 / 7268 vocabulary pyrad2 implements"
-    ),
-    "needs-freeradius-base": (
-        "depends on attributes / vendor IDs declared in "
-        "dictionary.freeradius (or its internal companion), which is "
-        "itself blocked on 'fr-extension-types' — unblocks transitively "
-        "once those FreeRADIUS-specific extensions are implemented"
-    ),
     "fr-quirk-typo": (
         "FreeRADIUS dict uses a capitalised data type token like "
         "'String' instead of 'string' — pyrad2 is stricter about case"
@@ -63,22 +52,22 @@ _REASONS = {
         "is never defined in any RFC dict — appears to be a "
         "forward-reference bug in the FreeRADIUS dict itself"
     ),
+    "fr-evs-format-syntax": (
+        "uses ``BEGIN-VENDOR <name> format=<extended-attribute-name>`` "
+        "syntax for binding EVS to a specific Extended wrapper — pyrad2 "
+        "currently only understands the ``parent=`` form"
+    ),
 }
 
 
 _INCOMPATIBLE_ON_RFC_BASE: dict[str, str] = {
-    # Forward-reference bug in dictionary.aruba itself.
+    # Forward-reference bug in the FreeRADIUS dict itself — VALUE
+    # entries point at attributes never declared anywhere.
     "dictionary.aruba": "fr-dict-forward-ref",
-    # FreeRADIUS internal / DHCP companions — all blocked behind
-    # dictionary.freeradius, which depends on FreeRADIUS-specific type
-    # aliases (uint16) and attribute flags (virtual, array) that are
-    # outside the RFC vocabulary pyrad2 implements.
-    "dictionary.compat": "needs-freeradius-base",
-    "dictionary.dhcp": "fr-extension-types",
-    "dictionary.freedhcp": "fr-extension-types",
-    "dictionary.freeradius": "fr-extension-types",
-    "dictionary.freeradius.evs5": "needs-freeradius-base",
-    "dictionary.freeradius.internal": "fr-extension-types",
+    "dictionary.freedhcp": "fr-dict-forward-ref",
+    # EVS bound to a wrapper by name via ``format=`` instead of
+    # ``parent=`` — different syntax for the same RFC 6929 EVS concept.
+    "dictionary.freeradius.evs5": "fr-evs-format-syntax",
     # Capitalised "String" in the type column.
     "dictionary.juniper": "fr-quirk-typo",
     # RFC 5904 long-packed-VSA continuation marker (``format=1,1,c``).
@@ -91,7 +80,7 @@ _INCOMPATIBLE_ON_RFC_BASE: dict[str, str] = {
 # Floor on how many vendor dictionaries must load on top of the RFC
 # base. Bump deliberately when pyrad2 grows a new capability; never
 # lower without a write-up.
-_MIN_LOADABLE_DICTIONARIES = 231
+_MIN_LOADABLE_DICTIONARIES = 235
 
 
 _DICTIONARY_NAME_RE = re.compile(r"^dictionary\.")
@@ -129,31 +118,52 @@ def _pytest_param(vendor_dict: Path) -> pytest.ParameterSet:
 
 @pytest.fixture(scope="session")
 def freeradius_rfc_base_files(freeradius_dictionaries_dir: Path) -> tuple[Path, ...]:
-    """Cumulatively-loadable RFC dicts in FreeRADIUS root inclusion order.
+    """Cumulatively-loadable base dicts in FreeRADIUS dependency order.
 
-    Walks the ``$INCLUDE dictionary.rfc*`` lines from upstream's root
-    ``share/dictionary``, in order. Each file that loads cleanly on top
-    of the chain so far is added; ones that fail (currently the four
-    nested-TLV RFC dicts) are skipped. The returned tuple is the
-    "compatible RFC base" every vendor test stacks against.
+    Walks the ``$INCLUDE`` lines from upstream's root ``share/dictionary``,
+    in order — first all ``dictionary.rfc*`` includes, then a small set
+    of FreeRADIUS-internal "second layer" dicts (``dictionary.freeradius``
+    et al.) that many vendor files reference. Each file that loads
+    cleanly on top of the chain so far is added; ones that fail are
+    skipped (those are tracked separately in
+    ``_INCOMPATIBLE_ON_RFC_BASE``). The returned tuple is the compatible
+    base every vendor test stacks against.
     """
+
+    # Dicts beyond the RFC set that vendor files transitively depend
+    # on (``compat`` declares VALUEs for ``Auth-Type`` which lives in
+    # ``freeradius.internal``; ``freedhcp`` declares VALUEs for
+    # attributes that live in ``dhcp``; etc.). Included in this fixed
+    # order because they themselves have a load dependency.
+    _SECOND_LAYER = (
+        "dictionary.freeradius",
+        "dictionary.freeradius.internal",
+        "dictionary.dhcp",
+    )
 
     root_text = (freeradius_dictionaries_dir / "dictionary").read_text()
     base: list[Path] = []
+
+    def _try_add(path: Path) -> None:
+        try:
+            Dictionary(*[str(p) for p in base], str(path))
+        except Exception:
+            return
+        base.append(path)
+
     for raw_line in root_text.splitlines():
         m = _RFC_INCLUDE_RE.match(raw_line.strip())
         if not m:
             continue
         path = freeradius_dictionaries_dir / m.group(1)
-        if not path.is_file():
-            continue
-        try:
-            Dictionary(*[str(p) for p in base], str(path))
-        except Exception:
-            # Tracked separately as nested-tlv / fr-quirk in
-            # _INCOMPATIBLE_ON_RFC_BASE — don't fail the base build.
-            continue
-        base.append(path)
+        if path.is_file():
+            _try_add(path)
+
+    for name in _SECOND_LAYER:
+        path = freeradius_dictionaries_dir / name
+        if path.is_file():
+            _try_add(path)
+
     return tuple(base)
 
 

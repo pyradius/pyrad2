@@ -1452,6 +1452,13 @@ class Packet(OrderedDict):
             return self._pkt_encode_long_extended(code, datalst)
         out = b""
         concat = self._is_concat_attribute(code)
+        if self._is_array_attribute(code) and len(datalst) > 1:
+            # RFC 8044 §3.8: multiple values packed into one AVP. Concat
+            # the per-value byte strings into a single payload before
+            # wrapping. Falls through to the standard path when there's
+            # only one value — the wire result is identical either way.
+            packed = b"".join(datalst)
+            return self._pkt_encode_attribute(code, packed)
         for data in datalst:
             if concat and len(data) > 253:
                 # Split values larger than one AVP into 253-byte chunks;
@@ -1473,9 +1480,32 @@ class Packet(OrderedDict):
         for code, datalst in self.items():
             if code in deferred_codes:
                 continue
+            if self._is_virtual_attribute(code):
+                # FreeRADIUS-style server-internal attribute. Present in
+                # the dictionary so config can reference it; never
+                # serialised onto the wire.
+                continue
             result += self._encode_avp_group(code, datalst)
         result += self._encode_deferred_obfuscated()
         return result
+
+    def _is_virtual_attribute(self, code: Hashable) -> bool:
+        """Return True when ``code`` refers to a dictionary attribute marked ``virtual``."""
+
+        dictionary = getattr(self, "dict", None)
+        if dictionary is None:
+            return False
+        attr = dictionary.attributes.get(self._decode_key(code))
+        return attr is not None and getattr(attr, "virtual", False)
+
+    def _is_array_attribute(self, code: Hashable) -> bool:
+        """Return True when ``code`` refers to a dictionary attribute marked ``array``."""
+
+        dictionary = getattr(self, "dict", None)
+        if dictionary is None:
+            return False
+        attr = dictionary.attributes.get(self._decode_key(code))
+        return attr is not None and getattr(attr, "array", False)
 
     def _pkt_decode_vendor_attribute(self, data: bytes) -> list[tuple]:
         if len(data) < 4:
@@ -1766,6 +1796,7 @@ class Packet(OrderedDict):
             packet = packet[attrlen:]
 
         self._merge_concat_attributes()
+        self._split_array_attributes()
         _trace_packet("in", raw, self)
 
     def _merge_concat_attributes(self) -> None:
@@ -1784,6 +1815,59 @@ class Packet(OrderedDict):
             chunks = OrderedDict.__getitem__(self, code)
             if isinstance(chunks, list) and len(chunks) > 1:
                 OrderedDict.__setitem__(self, code, [b"".join(chunks)])
+
+    # Fixed wire-byte length for every type that ``array`` is meaningful
+    # for (RFC 8044 §3.8). Variable-length types (string, octets, …) can't
+    # be ``array`` and aren't represented here.
+    _ARRAY_TYPE_SIZE = {
+        "byte": 1,
+        "short": 2,
+        "integer": 4,
+        "integer64": 8,
+        "signed": 4,
+        "date": 4,
+        "ipaddr": 4,
+        "ipv6addr": 16,
+        "ifid": 8,
+        "ether": 6,
+    }
+
+    def _split_array_attributes(self) -> None:
+        """Split RFC 8044 array-packed values back into one entry per element.
+
+        The decoder stores each AVP's value as a single list element. For
+        attributes declared ``array``, a single AVP carries N concatenated
+        values — we slice the bytes into ``N`` chunks of the type's fixed
+        wire length so downstream code sees the same shape as if the
+        sender had used N separate AVPs.
+        """
+
+        dictionary = getattr(self, "dict", None)
+        if dictionary is None:
+            return
+        for code in list(OrderedDict.keys(self)):
+            attr = dictionary.attributes.get(self._decode_key(code))
+            if attr is None or not getattr(attr, "array", False):
+                continue
+            chunk_size = self._ARRAY_TYPE_SIZE.get(attr.type)
+            if chunk_size is None:
+                continue
+            stored = OrderedDict.__getitem__(self, code)
+            if not isinstance(stored, list):
+                continue
+            split: list[bytes] = []
+            for packed in stored:
+                if not isinstance(packed, (bytes, bytearray)):
+                    split.append(packed)
+                    continue
+                if not packed or len(packed) % chunk_size != 0:
+                    split.append(bytes(packed))
+                    continue
+                split.extend(
+                    bytes(packed[i : i + chunk_size])
+                    for i in range(0, len(packed), chunk_size)
+                )
+            OrderedDict.__setitem__(self, code, split)
 
     def _salt_en_decrypt(self, data, salt):
         if self.request_authenticator is not None:

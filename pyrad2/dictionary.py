@@ -100,6 +100,17 @@ from pyrad2.exceptions import ParseError
 
 RadiusAttributeValue = int | str | bytes
 
+# Modern (FreeRADIUS v4 / RFC 8044) names for integer-family types.
+# Mapped to the older tokens pyrad2's encoder/decoder already supports,
+# so the rest of the codec doesn't need to know about either spelling.
+_TYPE_ALIASES: Dict[str, str] = {
+    "uint8": "byte",
+    "uint16": "short",
+    "uint32": "integer",
+    "uint64": "integer64",
+    "int32": "signed",
+}
+
 
 class Attribute:
     """Represents a RADIUS attribute.
@@ -113,6 +124,10 @@ class Attribute:
         encrypt (int): Encryption type (0 = none)
         concat (bool): Whether values longer than 253 bytes are split
             across multiple AVPs on the wire and concatenated on decode.
+        virtual (bool): FreeRADIUS-style flag for server-internal
+            attributes that are never sent on the wire.
+        array (bool): RFC 8044 §3.8 — multiple values of a fixed-length
+            type packed into a single AVP value field.
         values (bidict.BiDict): Mapping of named values to their codes
     """
 
@@ -127,6 +142,8 @@ class Attribute:
         encrypt: int = 0,
         has_tag: bool = False,
         concat: bool = False,
+        virtual: bool = False,
+        array: bool = False,
     ):
         if datatype not in DATATYPES:
             raise ValueError("Invalid data type")
@@ -137,6 +154,8 @@ class Attribute:
         self.encrypt = encrypt
         self.has_tag = has_tag
         self.concat = concat
+        self.virtual = virtual
+        self.array = array
         self.values = bidict.BiDict()
         self.sub_attributes: dict = {}
         self.parent = None
@@ -253,6 +272,8 @@ class Dictionary:
         has_tag = False
         encrypt = 0
         concat = False
+        virtual = False
+        array = False
         if len(tokens) >= 5:
 
             def keyval(o):
@@ -279,6 +300,26 @@ class Dictionary:
                     options_recognized = True
                 elif key == "concat":
                     concat = True
+                    options_recognized = True
+                elif key == "virtual":
+                    # FreeRADIUS uses ``virtual`` for attributes that
+                    # exist in the dictionary for server-internal use
+                    # but are never sent on the wire (Auth-Type,
+                    # Client-Shortname, etc.). Record the flag so the
+                    # encoder can skip them.
+                    virtual = True
+                    options_recognized = True
+                elif key == "array":
+                    # RFC 8044 §3.8: multiple values of a fixed-length
+                    # type packed into a single AVP value field.
+                    array = True
+                    options_recognized = True
+                elif key == "secret":
+                    # FreeRADIUS flag meaning "treat this attribute's
+                    # value as sensitive in logs". No wire-format
+                    # implication — accept it so dictionaries that
+                    # declare it (``dictionary.freeradius.internal``)
+                    # load cleanly.
                     options_recognized = True
 
             # When the trailing column isn't a recognized option list, fall
@@ -322,6 +363,11 @@ class Dictionary:
         parent_chain: tuple[int, ...] = tuple(codes[:-1])
 
         datatype = datatype.split("[")[0]
+        # FreeRADIUS v4 renamed the integer-family tokens to ``uintN`` /
+        # ``intN``. They mean the same thing as the older names pyrad2's
+        # codec uses, so normalise upfront and leave the rest of the
+        # parser / encoder unchanged.
+        datatype = _TYPE_ALIASES.get(datatype, datatype)
 
         if datatype not in DATATYPES:
             raise ParseError(
@@ -367,6 +413,8 @@ class Dictionary:
             encrypt=encrypt,
             has_tag=has_tag,
             concat=concat,
+            virtual=virtual,
+            array=array,
         )
         if datatype in ("tlv", "extended", "long-extended"):
             # Save the container under its full code chain so subsequent
