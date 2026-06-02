@@ -91,8 +91,12 @@ Extended-Vendor-Specific (EVS, RFC 6929 §2.3) is supported through the
 parent=<evs-attr>`` syntax. Every ATTRIBUTE inside such a block becomes
 an EVS-VSA carried under the named extended wrapper.
 
-Limitations:
-    * Nested TLVs deeper than two levels are not yet supported.
+TLV containers can nest to arbitrary depth via dotted-code notation
+(e.g. ``ATTRIBUTE IP-Port-Type 241.5.1 integer``); see the
+`Dictionary Reference <https://pyradius.github.io/pyrad2/dictionary>`_
+docs page for the full feature matrix and the
+`FreeRADIUS Conformance <https://pyradius.github.io/pyrad2/conformance>`_
+page for the upstream-corpus test suite.
 """
 
 from copy import copy

@@ -1,6 +1,194 @@
 Changelog
 =========
 
+3.1 - Unreleased
+----------------
+
+This release is about **real-world FreeRADIUS interop**. pyrad2 now ships
+a conformance suite that loads the upstream FreeRADIUS dictionary corpus
+and decodes its packet test vectors on every CI run, and every gap the
+suite surfaced got a real codec. As of this entry, 281 of the 244 vendor 
+dictionaries plus 41 of the v4 packet test vectors pass; only four 
+dictionaries still ``xfail``, and three of those are upstream 
+FreeRADIUS dictionary bugs.
+
+# FreeRADIUS conformance suite (NEW)
+
+- **New conformance test surface** under
+  ``tests/conformance/``. ``test_freeradius_dictionaries.py`` loads every
+  ``share/dictionary.<vendor>`` file from FreeRADIUS ``release_3_2_5``
+  on top of a real RFC base; ``test_freeradius_packet_vectors.py``
+  decodes every ``decode-proto`` test vector from FreeRADIUS v4's
+  ``src/tests/unit/protocols/radius/*.txt`` through ``parse_packet``.
+  The corpus is fetched on demand (gitignored) so the default
+  ``make test`` stays fast and network-free.
+- **New ``scripts/fetch_freeradius_corpus.py``** sparse-clones two pinned
+  FreeRADIUS slices into ``tests/conformance/_corpus/`` and records the
+  resolved SHA in a MANIFEST so months-later debugging always knows
+  which upstream revision the fixtures came from.
+- **New ``make conformance-fetch`` / ``make conformance-test`` targets**
+  and a dedicated ``conformance`` job in ``python-test.yml`` that runs
+  alongside the existing lint / typecheck / test matrix.
+- **Stacked-load model**: the per-vendor parametrized test loads every
+  vendor file on top of a session-built base — the cumulative set of
+  RFC dictionaries that parse cleanly, plus ``dictionary.freeradius``,
+  ``dictionary.freeradius.internal``, and ``dictionary.dhcp``. This
+  mirrors what real deployments do and turns "needs parent context"
+  failures into actual signal.
+- **Known-incompatible inventory** with structured reasons and
+  ``xfail(strict=True)``: the moment pyrad2 grows support for a listed
+  dict, the test fails and forces removal from the list. Documented
+  per-reason in ``test_freeradius_dictionaries.py``; only four entries
+  remain.
+- **New ``docs/conformance.md``** documenting the suite, what passes,
+  the four remaining xfails and which are upstream bugs vs. pyrad2's
+  to fix.
+
+# Dictionary parser
+
+- **N-level dotted codes** (e.g. ``241.5.1``). The parser previously
+  rejected codes deeper than two levels with "nested tlvs are not
+  supported." Sub-attribute keys are now tuples of every code from the
+  root container down; the per-file ``tlvs`` lookup is seeded from
+  previously-parsed attributes so a sub-attribute in one dictionary can
+  reference a container declared in another (e.g. ``dictionary.rfc7499``
+  declaring ``241.X`` under ``Extended-Attribute-1`` from
+  ``dictionary.rfc6929``). Undefined-parent failures now raise a clean
+  ``ParseError`` with the chain spelled out instead of a bare
+  ``KeyError``.
+- **New data types**
+  - ``vsa`` — parser token for the bare ``Vendor-Specific`` attribute
+    (RFC 2865 code 26), functionally equivalent to ``octets``. Lets
+    ``dictionary.rfc2865`` load.
+  - ``ipv4prefix`` (RFC 5090), IPv4 mirror of ``ipv6prefix`` (1 reserved
+    + 1 prefix-length + 4-byte address). Accepted at the parser layer;
+    wire codec deliberately deferred.
+  - ``combo-ip`` — full codec. Encoder dispatches on input shape via
+    ``ip_address()``; decoder dispatches on wire length (4 → IPv4, 16
+    → IPv6, anything else rejected). Wired into both
+    ``encode_attr`` / ``decode_attr`` and the parser's allowlist.
+- **FreeRADIUS v4 type aliases.** ``uint8`` / ``uint16`` / ``uint32`` /
+  ``uint64`` / ``int32`` are normalised at parse time to the canonical
+  ``byte`` / ``short`` / ``integer`` / ``integer64`` / ``signed``
+  tokens. Single point of truth; no downstream changes needed.
+- **New attribute flags**
+  - ``virtual`` — marks server-internal attributes; the encoder skips
+    them entirely. Lets ``dictionary.freeradius.internal`` load.
+  - ``array`` (RFC 8044 §3.8), multiple fixed-length values packed
+    into one AVP. Full codec: encoder concatenates on emit, decoder
+    splits on receipt based on a wire-length table covering all ten
+    fixed-length RADIUS types.
+  - ``secret`` — accepted as a no-op marker for parity with FR-internal
+    dicts.
+- **WiMAX / RFC 5904 long-packed VSAs.** ``VENDOR foo 12345
+  format=1,1,c`` is parsed. ``vendor_formats`` widened from
+  ``(type_len, len_len)`` to ``(type_len, len_len, has_continuation)``;
+  ``vendor_format()`` accessor updated. The same shape is used by
+  Telrad.
+
+# Wire encoding / decoding
+
+- **3+ level nested TLV codec.** Walking the parent chain in
+  ``add_attribute`` creates nested dicts at every level
+  (``self[241][5][1]`` for a ``241.5.1`` leaf). New
+  ``_encode_tlv_chain`` flattens any depth into TLV chain bytes; both
+  ``_pkt_encode_extended`` and ``_pkt_encode_long_extended`` detect
+  dict-valued slots and emit nested chains inside the outer envelope.
+  ``_pkt_encode_tlv`` (top-level TLV) handles dict-valued children too.
+  On the decode side, ``_decode_tlv_chain_into`` recursively parses
+  TLV chains, descending into any child slot the dictionary declares
+  as ``tlv``. ``__getitem__`` recurses so
+  ``pkt["Wrapper"]["Container"]["Leaf"]`` returns decoded values at
+  every depth. 2-level behaviour is unchanged; the chain walk
+  degenerates to the old single-parent case.
+- **Virtual attribute encoder skip.** ``_pkt_encode_attributes`` now
+  consults ``_is_virtual_attribute(code)`` and omits the AVP entirely
+  when the dictionary marked it ``virtual``.
+- **Array encoder + decoder.** ``_encode_avp_group`` concatenates
+  multi-value lists for ``array`` attributes into a single AVP value
+  before wrapping. A new ``_split_array_attributes`` runs after
+  ``_merge_concat_attributes`` on decode and slices the packed bytes
+  into N values based on the type's fixed wire length. Symmetric round
+  trip.
+- **WiMAX continuation encoder.** ``_pack_vsa_inner`` gains an optional
+  ``continuation`` parameter inserted between the length header and the
+  value. New ``_pkt_encode_continuation_vsa`` fragments long values
+  across multiple AVPs with the ``_VSA_CONTINUATION_MORE`` (0x80) flag
+  set on every fragment except the last. Per-fragment payload budget
+  is 246 bytes for the standard ``1,1,c`` layout.
+- **WiMAX continuation decoder.** ``_pkt_decode_vendor_attribute`` reads
+  the cont byte for continuation-format vendors, buffers fragments in
+  a per-decode ``_vsa_continuation_buf`` keyed by ``(vendor, atype)``,
+  and emits the joined value when More clears.
+- **``encode_octets`` no longer hard-caps raw-bytes input at 253
+  bytes.** The cap was the AVP layer's responsibility — fragmenting
+  attributes (``concat``, RFC 6929 ``long-extended``, RFC 5904
+  continuation) legitimately carry longer logical values. The 253 cap
+  still applies to ``0x...`` literal input where it catches typos.
+
+
+- **New ``DROP_NOREPLY`` sentinel** in ``pyrad2.dedup``. When a handler
+  raises or silently exits without a reply, the ``_dedup_dispatch``
+  finally clause records the sentinel via
+  ``ResponseCache.mark_dropped_if_in_flight``. Retransmissions within
+  the TTL hit the sentinel and DROP cleanly. The sentinel is
+  idempotent with ``record_reply``: a successful handler that
+  subsequently records a real reply clears the sentinel, so the no-op
+  on the second pass when the cache was already populated stays safe.
+- ``ResponseCache.lookup`` and ``consult_cache`` map both ``IN_FLIGHT``
+  and ``DROP_NOREPLY`` to ``DispatchAction.DROP``. ``record_reply``
+  clears any stale DROP sentinel; ``_evict_locked`` evicts expired
+  drop sentinels alongside real cached replies.
+- Both sync ``Server`` and ``ServerAsync`` updated. The legacy
+  ``dedup_drop_in_flight`` helper is retained for backwards
+  compatibility.
+
+# Bug fixes
+
+- **``proxy.py`` fix, broken since refactor.
+
+# Documentation
+
+- **New ``docs/conformance.md``** (linked from ``mkdocs.yml`` Guides
+  nav) covering the FreeRADIUS conformance suite — goal, model,
+  results, known corner cases.
+- **``docs/dictionary.md`` refreshed**: data-types table picked up
+  ``ipv4prefix``, ``combo-ip``, ``vsa``; attribute-options table picked
+  up ``array``, ``virtual``, ``secret``; ``format=`` section documents
+  the ``,c`` continuation; a new "Nested TLVs" section replaces the
+  stale "TLV nesting deeper than two levels is not supported" line and
+  shows the 3-level syntax + recursive packet access pattern. The
+  ``uint8``/``uint16``/``uint32``/``uint64``/``int32`` aliases get a
+  short paragraph.
+- **``docs/index.md`** "What's in the box" table refined: FreeRADIUS
+  dictionary row expanded (nested TLVs, WiMAX continuation, RFC 8044
+  arrays); new row for the conformance suite.
+- **``pyrad2/dictionary.py`` module docstring** updated: stale
+  "Nested TLVs deeper than two levels are not yet supported" removed;
+  pointers to the dictionary reference and the new conformance page
+  added.
+
+# Migration
+
+3.1 is **fully backwards compatible** with 3.0 for any code that
+worked under 3.0:
+
+- Existing dictionaries continue to load (the parser only got more
+  permissive; nothing got rejected that previously parsed).
+- Existing wire encode/decode produces byte-identical output for
+  2-level TLV and standard VSA paths (the nested-TLV chain walk
+  degenerates to the prior single-parent case for 2-level codes).
+- ``vendor_format()`` returns a 3-tuple instead of a 2-tuple. Code that
+  destructures the tuple needs an extra binding (``type_len, len_len,
+  has_continuation = …``). The default for vendors without ``,c``
+  declared is ``False``, so the third element is benign for legacy
+  callers that don't care.
+- ``encode_octets`` accepts longer raw-bytes input than before. No
+  caller is harmed by relaxed validation; this is strictly a fix for
+  long-value fragmenting attributes that the upstream cap was
+  silently breaking.
+
+
 3.0 - 2026-06-02
 ----------------
 

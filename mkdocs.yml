@@ -14,6 +14,7 @@ nav:
     - Running a RADIUS Server: server.md
     - Making RADIUS Requests: client.md
     - Dictionary Reference: dictionary.md
+    - FreeRADIUS Conformance: conformance.md
   - Migrating from pyrad: compatibility.md
   - API Reference:
       - server: api/server.md
