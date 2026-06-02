@@ -67,8 +67,11 @@ jobs:
       - name: Run pytest with coverage
         # ``--cov-fail-under`` enforces the project-wide floor. Bump it as
         # coverage genuinely improves; never lower it without justification.
+        # The conformance/ suite is excluded here — it runs in its own
+        # job below because it needs a FreeRADIUS corpus on disk.
         run: |
           uv run pytest tests/ \
+            --ignore=tests/conformance \
             --cov=pyrad2 \
             --cov-report=term \
             --cov-report=xml \
@@ -82,3 +85,22 @@ jobs:
       #   with:
       #     files: coverage.xml
       #     fail_ci_if_error: false
+
+  conformance:
+    # FreeRADIUS interop conformance. Fetches dictionaries and packet
+    # vectors from upstream FreeRADIUS at pinned SHAs and runs them
+    # through pyrad2's parser/decoder. Lives in its own job so the
+    # corpus fetch (a network operation) doesn't slow the matrix and
+    # so its failure mode is independently attributable.
+    name: Conformance (FreeRADIUS corpus)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Sync dev dependencies (locked)
+        run: uv sync --frozen
+      - name: Fetch FreeRADIUS corpus
+        run: make conformance-fetch
+      - name: Run conformance suite
+        run: make conformance-test

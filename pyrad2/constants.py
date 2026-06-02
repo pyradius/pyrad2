@@ -82,5 +82,17 @@ DATATYPES = frozenset(
         "extended",
         "long-extended",
         "evs",
+        # ``vsa`` is FreeRADIUS's parser token for the bare
+        # ``Vendor-Specific`` attribute (RFC 2865 code 26). The actual
+        # VSA dispatch happens at the packet layer, so for pyrad2's
+        # parser the token is functionally equivalent to ``octets`` —
+        # accept it so FreeRADIUS dictionaries load cleanly.
+        "vsa",
+        # ``ipv4prefix`` (RFC 5090) is the IPv4 mirror of ``ipv6prefix``:
+        # 1 reserved octet, 1 prefix-length octet, 4 address octets.
+        # Accepted at the parser layer so dictionaries declaring it
+        # (e.g. ``dictionary.rfc6572``) load. Wire-level encode/decode
+        # for it is a separate TODO.
+        "ipv4prefix",
     ]
 )

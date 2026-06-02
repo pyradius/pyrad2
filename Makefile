@@ -6,7 +6,17 @@ mypy:
 	uv run mypy pyrad2 $(ARGS)
 
 test:
-	uv run pytest --cov=pyrad2 --cov-report=term tests/ $(ARGS)
+	uv run pytest --cov=pyrad2 --cov-report=term --ignore=tests/conformance tests/ $(ARGS)
+
+# FreeRADIUS interop conformance: parses upstream FreeRADIUS dictionaries
+# and decodes packet test vectors. Excluded from `make test` because the
+# corpus is fetched on demand (gitignored); run these targets together
+# for the interop signal.
+conformance-fetch:
+	uv run python scripts/fetch_freeradius_corpus.py
+
+conformance-test:
+	uv run pytest tests/conformance/ $(ARGS)
 
 
 serve_docs:

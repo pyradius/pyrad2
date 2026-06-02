@@ -1,0 +1,4 @@
+# The corpus is fetched on demand by scripts/fetch_freeradius_corpus.py.
+# Never commit it: it's third-party material at pinned SHAs, and it would
+# bloat the repo.
+_corpus/
