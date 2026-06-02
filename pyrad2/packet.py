@@ -583,16 +583,44 @@ class Packet(OrderedDict):
         makes sure the authenticator and secret are copied over
         to the new instance.
         """
+        return self._make_reply(Packet, **attributes)
+
+    def _make_reply(
+        self,
+        cls: type["Packet"],
+        code: Optional[int] = None,
+        *,
+        extra_kwargs: Optional[dict[str, Any]] = None,
+        **attributes,
+    ) -> "Packet":
+        """Build a reply of ``cls`` carrying this packet's id/secret/dict/auth.
+
+        Subclasses use this to dedup the 8-line ``create_reply`` boilerplate.
+        ``code`` is positional in the constructed packet and ``extra_kwargs``
+        merges in subclass-specific carry-over fields (e.g. ``auth_type``
+        on ``AuthPacket``) that callers might want to override per call.
+        """
         attributes.setdefault("radius_version", self.radius_version)
-        return self._set_reply_context(
-            Packet(
+        merged: dict[str, Any] = {"dict": self.dict}
+        if extra_kwargs:
+            merged.update(extra_kwargs)
+        merged.update(attributes)
+        if code is None:
+            reply = cls(
                 id=self.id,
                 secret=self.secret,
                 authenticator=self.authenticator,
-                dict=self.dict,
-                **attributes,
+                **merged,
             )
-        )
+        else:
+            reply = cls(
+                code,
+                self.id,
+                self.secret,
+                self.authenticator,
+                **merged,
+            )
+        return self._set_reply_context(reply)
 
     def _set_reply_context(self, reply: ReplyPacketT) -> ReplyPacketT:
         """Store the request code needed for reply authenticators."""
@@ -949,6 +977,58 @@ class Packet(OrderedDict):
         """
         attr = self._pkt_encode_attributes()
         raw = _pack_v11_header(self.code, 20 + len(attr), self.token) + attr
+        _trace_packet("out", raw, self)
+        return raw
+
+    def _ensure_id_and_short_circuit_v11(self) -> Optional[bytes]:
+        """Common ``request_packet`` prologue: allocate an id and detect v1.1.
+
+        Returns the v1.1 wire bytes when the packet is RADIUS/1.1, else
+        ``None`` so the caller continues with the v1.0 encoder. Used by
+        every ``request_packet`` override to dedup the four lines of
+        ``if self.id is None ... if v1.1 return _serialize_v11`` boilerplate.
+        """
+        if self.id is None:
+            self.id = self.create_id()
+        if self.radius_version == RadiusVersion.V1_1:
+            return self._serialize_v11()
+        return None
+
+    def _encode_v10_request_with_random_authenticator(self) -> bytes:
+        """Encode a v1.0 request whose Request Authenticator is a random nonce.
+
+        Used by Access-Request and Status-Server. Honors
+        ``self.message_authenticator`` if set, but does not synthesize MA
+        on its own — callers decide via ``prepare_request_message_authenticator``
+        or by setting ``message_authenticator=True`` at construction.
+        """
+        if self.authenticator is None:
+            self.authenticator = self.create_authenticator()
+        if self.message_authenticator:
+            self._refresh_message_authenticator()
+        attr = self._pkt_encode_attributes()
+        header = struct.pack(
+            "!BBH16s", self.code, self.id, (20 + len(attr)), self.authenticator
+        )
+        raw = header + attr
+        _trace_packet("out", raw, self)
+        return raw
+
+    def _encode_v10_request_with_body_md5_authenticator(self) -> bytes:
+        """Encode a v1.0 request whose authenticator is MD5 over body+secret.
+
+        Used by Accounting-Request, CoA-Request, and Disconnect-Request.
+        If Message-Authenticator is required, refresh it *before* the body
+        MD5 so the digest covers the final on-wire attributes (one pass).
+        """
+        if self.message_authenticator:
+            self._refresh_message_authenticator()
+        attr = self._pkt_encode_attributes()
+        header = struct.pack("!BBH", self.code, self.id, (20 + len(attr)))
+        self.authenticator = hashlib.md5(
+            header[0:4] + 16 * b"\x00" + attr + self.secret
+        ).digest()
+        raw = header + self.authenticator + attr
         _trace_packet("out", raw, self)
         return raw
 
@@ -1612,44 +1692,22 @@ class StatusPacket(Packet):
         self, code: int = PacketType.AccessAccept, **attributes
     ) -> "Packet":
         """Create a response packet for this Status-Server request."""
-        attributes.setdefault("radius_version", self.radius_version)
-        return self._set_reply_context(
-            Packet(
-                code=code,
-                id=self.id,
-                secret=self.secret,
-                authenticator=self.authenticator,
-                dict=self.dict,
-                **attributes,
-            )
-        )
+        return self._make_reply(Packet, code, **attributes)
 
     def request_packet(self) -> bytes:
         """Create a ready-to-transmit RFC 5997 Status-Server request."""
-        if self.id is None:
-            self.id = self.create_id()
-
-        if self.radius_version == RadiusVersion.V1_1:
-            # RFC 9765: Token in the 4-byte slot, Reserved-1 and Reserved-2
-            # zero. Status-Server has no Message-Authenticator in v1.1.
-            # Take this branch before seeding self.authenticator so v1.1
-            # packets don't end up carrying misleading legacy state.
-            return self._serialize_v11()
-
+        # ``_ensure_id_and_short_circuit_v11`` handles id allocation and
+        # RFC 9765 emission. Take this branch *before* seeding
+        # ``self.authenticator`` so v1.1 packets don't carry misleading
+        # legacy state (Token lives in the 4-byte slot, Reserved-1/2 are
+        # zero, no Message-Authenticator).
+        v11 = self._ensure_id_and_short_circuit_v11()
+        if v11 is not None:
+            return v11
         if self.authenticator is None:
             self.authenticator = self.create_authenticator()
-
         prepare_request_message_authenticator(self)
-        if self.message_authenticator:
-            self._refresh_message_authenticator()
-
-        attr = self._pkt_encode_attributes()
-        header = struct.pack(
-            "!BBH16s", self.code, self.id, (20 + len(attr)), self.authenticator
-        )
-        raw = header + attr
-        _trace_packet("out", raw, self)
-        return raw
+        return self._encode_v10_request_with_random_authenticator()
 
     def verify_status_request(self) -> bool:
         """Verify an incoming RFC 5997 Status-Server request.
@@ -1701,17 +1759,11 @@ class AuthPacket(Packet):
         makes sure the authenticator and secret are copied over
         to the new instance.
         """
-        attributes.setdefault("radius_version", self.radius_version)
-        return self._set_reply_context(
-            AuthPacket(
-                PacketType.AccessAccept,
-                self.id,
-                self.secret,
-                self.authenticator,
-                dict=self.dict,
-                auth_type=self.auth_type,
-                **attributes,
-            )
+        return self._make_reply(
+            AuthPacket,
+            PacketType.AccessAccept,
+            extra_kwargs={"auth_type": self.auth_type},
+            **attributes,
         )
 
     def request_packet(self) -> bytes:
@@ -1722,47 +1774,46 @@ class AuthPacket(Packet):
         Returns:
             bytes: Raw packet
         """
-        if self.id is None:
-            self.id = self.create_id()
+        # The v1.1 branch in ``_ensure_id_and_short_circuit_v11`` runs
+        # *before* the random-authenticator seeding so the caller's
+        # per-connection Token (stamped by ``RadSecClient``) doesn't get
+        # shadowed by legacy v1.0 state.
+        v11 = self._ensure_id_and_short_circuit_v11()
+        if v11 is not None:
+            return v11
+        if self.auth_type == "eap-md5":
+            return self._encode_v10_eap_md5_request()
+        return self._encode_v10_request_with_random_authenticator()
 
-        if self.radius_version == RadiusVersion.V1_1:
-            # RFC 9765 emission. The caller (RadSecClient) is responsible
-            # for stamping a per-connection Token into self.token before
-            # invoking this method. Take this branch *before* seeding
-            # self.authenticator so v1.1 packets don't carry misleading
-            # legacy state.
-            return self._serialize_v11()
+    def _encode_v10_eap_md5_request(self) -> bytes:
+        """Encode an Access-Request whose Message-Authenticator MUST land
+        in a fixed AVP slot for the EAP-MD5 handshake.
 
+        Distinct from the generic ``_encode_v10_request_with_random_authenticator``
+        because the MA digest is computed over the partially-built packet
+        (header + attrs + zeroed MA AVP) and only then appended.
+        """
         if self.authenticator is None:
             self.authenticator = self.create_authenticator()
-
         if self.message_authenticator:
             self._refresh_message_authenticator()
-
         attr = self._pkt_encode_attributes()
-        if self.auth_type == "eap-md5":
-            header = struct.pack(
-                "!BBH16s", self.code, self.id, (20 + 18 + len(attr)), self.authenticator
-            )
-            digest = hmac_new(
-                self.secret,
-                header
-                + attr
-                + struct.pack("!BB16s", 80, struct.calcsize("!BB16s"), b""),
-            ).digest()
-            raw = (
-                header
-                + attr
-                + struct.pack("!BB16s", 80, struct.calcsize("!BB16s"), digest)
-            )
-            _trace_packet("out", raw, self)
-            return raw
-
         header = struct.pack(
-            "!BBH16s", self.code, self.id, (20 + len(attr)), self.authenticator
+            "!BBH16s",
+            self.code,
+            self.id,
+            (20 + 18 + len(attr)),
+            self.authenticator,
         )
-
-        raw = header + attr
+        digest = hmac_new(
+            self.secret,
+            header + attr + struct.pack("!BB16s", 80, struct.calcsize("!BB16s"), b""),
+        ).digest()
+        raw = (
+            header
+            + attr
+            + struct.pack("!BB16s", 80, struct.calcsize("!BB16s"), digest)
+        )
         _trace_packet("out", raw, self)
         return raw
 
@@ -1950,16 +2001,8 @@ class AcctPacket(Packet):
         makes sure the authenticator and secret are copied over
         to the new instance.
         """
-        attributes.setdefault("radius_version", self.radius_version)
-        return self._set_reply_context(
-            AcctPacket(
-                PacketType.AccountingResponse,
-                self.id,
-                self.secret,
-                self.authenticator,
-                dict=self.dict,
-                **attributes,
-            )
+        return self._make_reply(
+            AcctPacket, PacketType.AccountingResponse, **attributes
         )
 
     def verify_acct_request(self) -> bool:
@@ -1971,33 +2014,17 @@ class AcctPacket(Packet):
         return self.verify_packet()
 
     def request_packet(self) -> bytes:
-        """Create a ready-to-transmit authentication request packet.
+        """Create a ready-to-transmit Accounting-Request packet.
         Return a RADIUS packet which can be directly transmitted
         to a RADIUS server.
 
         Returns:
             bytes: Raw packet
         """
-
-        if self.id is None:
-            self.id = self.create_id()
-
-        if self.radius_version == RadiusVersion.V1_1:
-            # RFC 9765 emission; Token comes from per-connection counter.
-            return self._serialize_v11()
-
-        if self.message_authenticator:
-            self._refresh_message_authenticator()
-
-        attr = self._pkt_encode_attributes()
-        header = struct.pack("!BBH", self.code, self.id, (20 + len(attr)))
-        self.authenticator = hashlib.md5(
-            header[0:4] + 16 * b"\x00" + attr + self.secret
-        ).digest()
-
-        ans = header + self.authenticator + attr
-        _trace_packet("out", ans, self)
-        return ans
+        v11 = self._ensure_id_and_short_circuit_v11()
+        if v11 is not None:
+            return v11
+        return self._encode_v10_request_with_body_md5_authenticator()
 
 
 class CoAPacket(Packet):
@@ -2029,17 +2056,7 @@ class CoAPacket(Packet):
         makes sure the authenticator and secret are copied over
         to the new instance.
         """
-        attributes.setdefault("radius_version", self.radius_version)
-        return self._set_reply_context(
-            CoAPacket(
-                PacketType.CoAACK,
-                self.id,
-                self.secret,
-                self.authenticator,
-                dict=self.dict,
-                **attributes,
-            )
-        )
+        return self._make_reply(CoAPacket, PacketType.CoAACK, **attributes)
 
     def verify_coa_request(self) -> bool:
         """Verify request authenticator.
@@ -2050,38 +2067,15 @@ class CoAPacket(Packet):
         return self.verify_packet()
 
     def request_packet(self) -> bytes:
-        """Create a ready-to-transmit CoA request packet.
-        Return a RADIUS packet which can be directly transmitted
-        to a RADIUS server.
+        """Create a ready-to-transmit CoA-Request packet.
 
-        :return: raw packet
-        :rtype:  string
+        Returns:
+            bytes: Raw packet
         """
-
-        if self.id is None:
-            self.id = self.create_id()
-
-        if self.radius_version == RadiusVersion.V1_1:
-            # RFC 9765 emission.
-            return self._serialize_v11()
-
-        attr = self._pkt_encode_attributes()
-
-        header = struct.pack("!BBH", self.code, self.id, (20 + len(attr)))
-        self.authenticator = hashlib.md5(
-            header[0:4] + 16 * b"\x00" + attr + self.secret
-        ).digest()
-
-        if self.message_authenticator:
-            self._refresh_message_authenticator()
-            attr = self._pkt_encode_attributes()
-            self.authenticator = hashlib.md5(
-                header[0:4] + 16 * b"\x00" + attr + self.secret
-            ).digest()
-
-        raw = header + self.authenticator + attr
-        _trace_packet("out", raw, self)
-        return raw
+        v11 = self._ensure_id_and_short_circuit_v11()
+        if v11 is not None:
+            return v11
+        return self._encode_v10_request_with_body_md5_authenticator()
 
 
 def create_id() -> int:

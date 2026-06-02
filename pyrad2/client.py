@@ -14,7 +14,7 @@ from pyrad2.dictionary import Dictionary
 from pyrad2.exceptions import Timeout
 
 
-class Client(host.Host):
+class Client(host._ClientPacketFactoryMixin, host.Host):
     """Basic RADIUS client.
     This class implements a basic RADIUS client. It can send requests
     to a RADIUS server, taking care of timeouts and retries, and
@@ -107,48 +107,11 @@ class Client(host.Host):
             self._socket.close()
             self._socket = None
 
-    def create_auth_packet(self, **args) -> packet.Packet:
-        """Create a new RADIUS packet.
-        This utility function creates a new RADIUS packet which can
-        be used to communicate with the RADIUS server this client
-        talks to. This is initializing the new packet with the
-        dictionary and secret used for the client.
-
-        Returns:
-            packet.Packet: A new empty packet instance
-        """
-        ma_enabled = True if self.enforce_ma else False
-        return super().create_auth_packet(
-            secret=self.secret, message_authenticator=ma_enabled, **args
-        )
-
-    def create_acct_packet(self, **args) -> packet.Packet:
-        """Create a new RADIUS packet.
-        This utility function creates a new RADIUS packet which can
-        be used to communicate with the RADIUS server this client
-        talks to. This is initializing the new packet with the
-        dictionary and secret used for the client.
-
-        Returns:
-            packet.Packet: A new empty packet instance
-        """
-        return super().create_acct_packet(secret=self.secret, **args)
-
-    def create_coa_packet(self, **args) -> packet.Packet:
-        """Create a new RADIUS packet.
-        This utility function creates a new RADIUS packet which can
-        be used to communicate with the RADIUS server this client
-        talks to. This is initializing the new packet with the
-        dictionary and secret used for the client.
-
-        Returns:
-            packet.Packet: A new empty packet instance
-        """
-        return super().create_coa_packet(secret=self.secret, **args)
-
-    def create_status_packet(self, **args) -> packet.StatusPacket:
-        """Create an RFC 5997 Status-Server health-check packet."""
-        return packet.StatusPacket(dict=self.dict, secret=self.secret, **args)
+    # ``create_*_packet`` is provided by ``_ClientPacketFactoryMixin``
+    # via the MRO. Sync ``Client`` defers ``id`` allocation to the
+    # ``Packet`` constructor's module-level counter (no per-transport
+    # tracking — the sync client serialises sends so internal id
+    # collisions can't happen).
 
     def _status_port(self, port: str) -> int:
         """Return the UDP port used for a Status-Server health check."""

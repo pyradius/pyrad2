@@ -11,6 +11,7 @@ from pyrad2 import eap
 from pyrad2.constants import PacketType
 from pyrad2.dictionary import Dictionary
 from pyrad2.exceptions import IdentifierExhausted
+from pyrad2.host import _ClientPacketFactoryMixin
 from pyrad2.packet import (
     AcctPacket,
     AuthPacket,
@@ -228,7 +229,7 @@ class DatagramProtocolClient(asyncio.Protocol):
         return self
 
 
-class ClientAsync:
+class ClientAsync(_ClientPacketFactoryMixin):
     """Asyncio-based RADIUS client.
 
     Sends Access-Request, Accounting-Request, CoA, and Status-Server
@@ -397,64 +398,31 @@ class ClientAsync:
             del self.protocol_acct
             self.protocol_acct = None
 
-    def create_auth_packet(self, **args) -> AuthPacket:
-        """Create a new RADIUS packet.
-        This utility function creates a new RADIUS packet which can
-        be used to communicate with the RADIUS server this client
-        talks to. This is initializing the new packet with the
-        dictionary and secret used for the client.
+    def _protocol_for_server_type(self, server_type: str) -> DatagramProtocolClient:
+        """Look up the initialised ``DatagramProtocolClient`` for a server type.
 
-        Returns:
-            packet.Packet: A new empty packet instance
+        Raises ``Exception`` if the matching transport hasn't been started
+        yet — callers of ``create_*_packet`` need the id space to come
+        from the same socket the packet will eventually be sent on.
         """
-        if not self.protocol_auth:
-            raise Exception("Transport not initialized")
+        if server_type == self._AUTH_SERVER_TYPE:
+            if not self.protocol_auth:
+                raise Exception("Transport not initialized")
+            return self.protocol_auth
+        if server_type == self._ACCT_SERVER_TYPE:
+            if not self.protocol_acct:
+                raise Exception("Transport not initialized")
+            return self.protocol_acct
+        if server_type == self._COA_SERVER_TYPE:
+            if not self.protocol_coa:
+                raise Exception("Transport not initialized")
+            return self.protocol_coa
+        raise ValueError(f"Unknown server type {server_type!r}")
 
-        return AuthPacket(
-            dict=self.dict,
-            id=self.protocol_auth.create_id(),
-            secret=self.secret,
-            message_authenticator=True if self.enforce_ma else False,
-            **args,
-        )
-
-    def create_acct_packet(self, **args) -> AcctPacket:
-        """Create a new RADIUS packet.
-        This utility function creates a new RADIUS packet which can
-        be used to communicate with the RADIUS server this client
-        talks to. This is initializing the new packet with the
-        dictionary and secret used for the client.
-
-        Returns:
-            packet.Packet: A new empty packet instance
-        """
-        if not self.protocol_acct:
-            raise Exception("Transport not initialized")
-
-        return AcctPacket(
-            id=self.protocol_acct.create_id(),
-            dict=self.dict,
-            secret=self.secret,
-            **args,
-        )
-
-    def create_coa_packet(self, **args) -> CoAPacket:
-        """Create a new RADIUS packet.
-        This utility function creates a new RADIUS packet which can
-        be used to communicate with the RADIUS server this client
-        talks to. This is initializing the new packet with the
-        dictionary and secret used for the client.
-
-        Returns:
-            packet.Packet: A new empty packet instance
-        """
-
-        if not self.protocol_coa:
-            raise Exception("Transport not initialized")
-
-        return CoAPacket(
-            id=self.protocol_coa.create_id(), dict=self.dict, secret=self.secret, **args
-        )
+    def _allocate_packet_id(self, server_type: str) -> int:
+        """Pull the next free identifier from the matching transport's
+        per-flow counter. See ``DatagramProtocolClient.create_id``."""
+        return self._protocol_for_server_type(server_type).create_id()
 
     def _status_protocol(self, port: str) -> DatagramProtocolClient:
         """Return the protocol used for a Status-Server health check."""
@@ -468,8 +436,15 @@ class ClientAsync:
             return self.protocol_acct
         raise ValueError("Status-Server port must be 'auth' or 'acct'")
 
-    def create_status_packet(self, *, port: str = "auth", **args) -> StatusPacket:
-        """Create an RFC 5997 Status-Server health-check packet."""
+    def create_status_packet(
+        self, *, port: str = "auth", **args
+    ) -> StatusPacket:
+        """Create an RFC 5997 Status-Server health-check packet.
+
+        Overrides the mixin to honour the ``port`` kwarg, since async
+        Status-Server probes can be routed at either the auth or
+        accounting transport's id space.
+        """
         protocol = self._status_protocol(port)
         return StatusPacket(
             id=protocol.create_id(),

@@ -6,14 +6,13 @@ from loguru import logger
 
 from pyrad2 import eap
 from pyrad2.constants import PacketType
+from pyrad2.host import _ClientPacketFactoryMixin
 from pyrad2.packet import (
-    AcctPacket,
     AuthPacket,
     CoAPacket,
     Packet,
     PacketError,
     PacketImplementation,
-    StatusPacket,
     prepare_request_message_authenticator,
 )
 from pyrad2.radsec.v11 import (
@@ -28,7 +27,7 @@ from pyrad2.tools import read_radius_packet
 from pyrad2.tools import cert_fingerprint_matches, normalize_cert_fingerprint
 
 
-class RadSecClient:
+class RadSecClient(_ClientPacketFactoryMixin):
     # TLS 1.3 by default. RFC 9325 deprecates TLS 1.1 and below and treats
     # 1.2 as legacy; RFC 9750 mandates 1.3 for RADIUS/1.1. Set
     # ``minimum_tls_version=ssl.TLSVersion.TLSv1_2`` explicitly to bridge
@@ -340,59 +339,13 @@ class RadSecClient:
             if not self.reuse_connection:
                 await self._close_writer(writer)
 
-    def create_auth_packet(self, **kwargs) -> AuthPacket:
-        """Create a new RADIUS packet.
-        This utility function creates a new RADIUS packet which can
-        be used to communicate with the RADIUS server this client
-        talks to. This is initializing the new packet with the
-        dictionary and secret used for the client.
-
-        Returns:
-            Packet: A new AuthPacket instance
-        """
-        id = kwargs.pop("id", Packet.create_id())
-        return AuthPacket(
-            dict=self.dict,
-            id=id,
-            secret=self.secret,
-            **kwargs,
-        )
-
-    def create_acct_packet(self, **kwargs) -> AcctPacket:
-        """Create a new RADIUS packet.
-        This utility function creates a new RADIUS packet which can
-        be used to communicate with the RADIUS server this client
-        talks to. This is initializing the new packet with the
-        dictionary and secret used for the client.
-
-        Returns:
-            Packet: A new AcctPacket instance
-        """
-        id = kwargs.pop("id", Packet.create_id())
-        return AcctPacket(
-            id=id,
-            dict=self.dict,
-            secret=self.secret,
-            **kwargs,
-        )
-
-    def create_coa_packet(self, **kwargs) -> CoAPacket:
-        """Create a new RADIUS packet.
-        This utility function creates a new RADIUS packet which can
-        be used to communicate with the RADIUS server this client
-        talks to. This is initializing the new packet with the
-        dictionary and secret used for the client.
-
-        Returns:
-            Packet: A new CoA packet instance
-        """
-        id = kwargs.pop("id", Packet.create_id())
-        return CoAPacket(id=id, dict=self.dict, secret=self.secret, **kwargs)
-
-    def create_status_packet(self, **kwargs) -> StatusPacket:
-        """Create an RFC 5997 Status-Server health-check packet."""
-        id = kwargs.pop("id", Packet.create_id())
-        return StatusPacket(id=id, dict=self.dict, secret=self.secret, **kwargs)
+    def _allocate_packet_id(self, server_type: str) -> int:
+        """RadSec doesn't allocate ids per source-port flow (TLS is a
+        single stream multiplexed over one TCP connection). Use a
+        ``Packet.create_id``-style random byte; collisions are caught
+        by the v1.1 Token slot or by the request authenticator on
+        v1.0."""
+        return Packet.create_id()
 
     def create_packet(self, id, **kwargs) -> Packet:
         """Create a generic RADIUS packet with this client's dictionary and secret."""
