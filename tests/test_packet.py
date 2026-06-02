@@ -1184,6 +1184,73 @@ class TestFreeRADIUSExtensions:
         assert encoded == b"\x03\x06\x0a\x00\x00\x07"
 
 
+class TestWiMAXContinuation:
+    """RFC 5904 / WiMAX long-packed VSAs (``format=1,1,c``).
+
+    Continuation byte after the type/length header; high bit (0x80)
+    is the More flag for fragmentation across multiple AVPs.
+    """
+
+    def _make_packet(self):
+        d = Dictionary(
+            StringIO(
+                "VENDOR WiMAX 24757 format=1,1,c\n"
+                "BEGIN-VENDOR WiMAX\n"
+                "ATTRIBUTE WiMAX-Capability 1 octets\n"
+                "END-VENDOR WiMAX\n"
+            )
+        )
+        return packet.Packet(
+            id=0,
+            secret=b"secret",
+            authenticator=b"0123456789ABCDEF",
+            dict=d,
+        )
+
+    def test_encode_short_value_emits_single_avp_with_zero_continuation(self):
+        pkt = self._make_packet()
+        pkt.add_attribute("WiMAX-Capability", b"hello")
+        encoded = pkt._pkt_encode_attributes()
+        # AVP: [26][len=14][vendor=24757][vsa_type=1][vsa_len=8][cont=0][hello]
+        # vsa_len counts type(1) + len(1) + cont(1) + value(5) = 8.
+        assert encoded == (
+            b"\x1a\x0e" + struct.pack("!L", 24757) + b"\x01\x08\x00hello"
+        )
+
+    def test_encode_long_value_fragments_with_more_flag(self):
+        pkt = self._make_packet()
+        # Per-fragment payload budget = 255 - 2 (AVP hdr) - 4 (vendor-id)
+        # - 1 (vsa_type) - 1 (vsa_len) - 1 (continuation) = 246. A
+        # 250-byte value needs two fragments: 246 + 4.
+        value = b"A" * 250
+        pkt.add_attribute("WiMAX-Capability", value)
+        encoded = pkt._pkt_encode_attributes()
+
+        first_avp_len = 2 + 4 + 1 + 1 + 1 + 246
+        second_avp_len = 2 + 4 + 1 + 1 + 1 + 4
+        assert len(encoded) == first_avp_len + second_avp_len
+
+        # Cont byte sits right after the vsa_len. More on first fragment,
+        # cleared on the last.
+        first_cont = encoded[2 + 4 + 1 + 1]
+        second_cont = encoded[first_avp_len + 2 + 4 + 1 + 1]
+        assert first_cont == 0x80
+        assert second_cont == 0x00
+
+    def test_roundtrip_long_value(self):
+        send = self._make_packet()
+        value = b"B" * 500  # spans three fragments
+        send.add_attribute("WiMAX-Capability", value)
+        wire = send._pkt_encode_attributes()
+
+        recv = self._make_packet()
+        header = struct.pack("!BBH", 1, 1, 20 + len(wire)) + b"0123456789ABCDEF"
+        recv.decode_packet(header + wire)
+
+        # Decoder reassembles the fragment chain into one logical value.
+        assert recv["WiMAX-Capability"] == [value]
+
+
 class TestLongExtendedAttribute:
     """RFC 6929 long-extended attributes (245-246), with fragmentation."""
 

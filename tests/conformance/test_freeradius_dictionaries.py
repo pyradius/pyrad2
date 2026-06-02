@@ -38,11 +38,6 @@ _CORPUS_DIR = Path(__file__).parent / "_corpus" / "dictionaries" / "share"
 # the corresponding entries from ``_INCOMPATIBLE_ON_RFC_BASE`` so the
 # tests start protecting the new capability.
 _REASONS = {
-    "wimax-continuation": (
-        "uses 'format=1,1,c' continuation marker (RFC 5904 long-packed "
-        "VSAs, originally for WiMAX) — pyrad2's VSA format parser only "
-        "supports the standard (type_len, len_len) pair"
-    ),
     "fr-quirk-typo": (
         "FreeRADIUS dict uses a capitalised data type token like "
         "'String' instead of 'string' — pyrad2 is stricter about case"
@@ -70,17 +65,12 @@ _INCOMPATIBLE_ON_RFC_BASE: dict[str, str] = {
     "dictionary.freeradius.evs5": "fr-evs-format-syntax",
     # Capitalised "String" in the type column.
     "dictionary.juniper": "fr-quirk-typo",
-    # RFC 5904 long-packed-VSA continuation marker (``format=1,1,c``).
-    "dictionary.telrad": "wimax-continuation",
-    "dictionary.wimax": "wimax-continuation",
-    "dictionary.wimax.alvarion": "wimax-continuation",
-    "dictionary.wimax.wichorus": "wimax-continuation",
 }
 
 # Floor on how many vendor dictionaries must load on top of the RFC
 # base. Bump deliberately when pyrad2 grows a new capability; never
 # lower without a write-up.
-_MIN_LOADABLE_DICTIONARIES = 235
+_MIN_LOADABLE_DICTIONARIES = 239
 
 
 _DICTIONARY_NAME_RE = re.compile(r"^dictionary\.")

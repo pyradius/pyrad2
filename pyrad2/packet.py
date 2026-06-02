@@ -1189,37 +1189,88 @@ class Packet(OrderedDict):
     _VSA_TYPE_FORMATS = {1: "!B", 2: "!H", 4: "!I"}
     _VSA_LEN_FORMATS = {1: "!B", 2: "!H"}
 
-    def _vendor_format(self, vendor_id: int) -> tuple[int, int]:
-        """Return the ``(type_len, len_len)`` VSA wire format for a vendor."""
+    def _vendor_format(self, vendor_id: int) -> tuple[int, int, bool]:
+        """Return the ``(type_len, len_len, has_continuation)`` VSA wire format."""
         dictionary = getattr(self, "dict", None)
         if dictionary is None:
-            return (1, 1)
+            return (1, 1, False)
         return dictionary.vendor_format(vendor_id)
+
+    # WiMAX / RFC 5904 continuation byte: high bit set means "more
+    # fragments follow"; receiver reassembles by (vendor, type).
+    _VSA_CONTINUATION_MORE = 0x80
 
     @classmethod
     def _pack_vsa_inner(
-        cls, vsa_type: int, value: bytes, type_len: int, len_len: int
+        cls,
+        vsa_type: int,
+        value: bytes,
+        type_len: int,
+        len_len: int,
+        continuation: Optional[int] = None,
     ) -> bytes:
         """Encode the inner VSA header per RFC 2865 §5.26 honoring vendor format.
 
         ``len_len=0`` produces a header with no length field; the value
-        extends to the end of the encapsulating attribute.
+        extends to the end of the encapsulating attribute. When
+        ``continuation`` is not None, a continuation byte (RFC 5904) is
+        inserted between the length field and the value.
         """
         encoded = struct.pack(cls._VSA_TYPE_FORMATS[type_len], vsa_type)
+        cont_size = 1 if continuation is not None else 0
         if len_len:
-            total = type_len + len_len + len(value)
+            total = type_len + len_len + cont_size + len(value)
             encoded += struct.pack(cls._VSA_LEN_FORMATS[len_len], total)
+        if continuation is not None:
+            encoded += struct.pack("!B", continuation)
         return encoded + value
 
     def _pkt_encode_attribute(self, key: Hashable, value: Any):
         if isinstance(key, tuple):
             vendor_id, vsa_type = key
-            type_len, len_len = self._vendor_format(vendor_id)
+            type_len, len_len, has_continuation = self._vendor_format(vendor_id)
+            if has_continuation:
+                return self._pkt_encode_continuation_vsa(
+                    vendor_id, vsa_type, value, type_len, len_len
+                )
             inner = self._pack_vsa_inner(vsa_type, value, type_len, len_len)
             value = struct.pack("!L", vendor_id) + inner
             key = 26
 
         return struct.pack("!BB", key, (len(value) + 2)) + value
+
+    def _pkt_encode_continuation_vsa(
+        self,
+        vendor_id: int,
+        vsa_type: int,
+        value: bytes,
+        type_len: int,
+        len_len: int,
+    ) -> bytes:
+        """Encode an RFC 5904 / WiMAX VSA, fragmenting on overflow.
+
+        Each AVP carries one type/length pair plus a continuation byte
+        whose high bit (``_VSA_CONTINUATION_MORE``) flags fragments.
+        Fragmentation budget per AVP is 255 minus the AVP-level header
+        (2), vendor-id (4), the per-vendor type/length, and the
+        continuation byte itself.
+        """
+
+        per_fragment_max = 255 - 2 - 4 - type_len - len_len - 1
+        if per_fragment_max < 1:
+            # Cannot fit any payload in one AVP given the format —
+            # caller has used a pathologically wide ``format=`` spec.
+            raise ValueError("vendor format leaves no room for continuation payload")
+        chunks = self._split_into_chunks(value, per_fragment_max)
+        out = b""
+        for index, chunk in enumerate(chunks):
+            more = self._VSA_CONTINUATION_MORE if index < len(chunks) - 1 else 0
+            inner = self._pack_vsa_inner(
+                vsa_type, chunk, type_len, len_len, continuation=more
+            )
+            avp_value = struct.pack("!L", vendor_id) + inner
+            out += struct.pack("!BB", 26, len(avp_value) + 2) + avp_value
+        return out
 
     def _pkt_encode_tlv(self, tlv_key: str, tlv_value: Any) -> bytes:
         tlv_attr = self.dict.attributes[self._decode_key(tlv_key)]
@@ -1512,7 +1563,7 @@ class Packet(OrderedDict):
             return [(26, data)]
 
         (vendor,) = struct.unpack("!L", data[:4])
-        type_len, len_len = self._vendor_format(vendor)
+        type_len, len_len, has_continuation = self._vendor_format(vendor)
         header_len = type_len + len_len
         inner = data[4:]
 
@@ -1542,7 +1593,27 @@ class Packet(OrderedDict):
             except struct.error:
                 return [(26, data)]
 
-            payload = inner[offset + header_len : payload_end]
+            payload_start = offset + header_len
+            if has_continuation:
+                # RFC 5904: one continuation byte sits between the
+                # length header and the value. Buffer fragments keyed
+                # on (vendor, atype); emit the joined value when the
+                # More flag clears.
+                if payload_start >= payload_end:
+                    return [(26, data)]
+                continuation = inner[payload_start]
+                payload = inner[payload_start + 1 : payload_end]
+                buf_key = (vendor, atype)
+                buf = self._vsa_continuation_buf.setdefault(buf_key, bytearray())
+                buf.extend(payload)
+                if continuation & self._VSA_CONTINUATION_MORE:
+                    offset = payload_end
+                    continue
+                payload = bytes(buf)
+                del self._vsa_continuation_buf[buf_key]
+            else:
+                payload = inner[payload_start:payload_end]
+
             try:
                 if self._pkt_is_tlv_attribute((vendor, atype)):
                     self._pkt_decode_tlv_attribute((vendor, atype), payload)
@@ -1756,6 +1827,10 @@ class Packet(OrderedDict):
         # Keys are (parent_code, ext_type) for plain long-extended fragments
         # and (parent_code, ext_type, vendor_id, vendor_type) for EVS ones.
         self._long_ext_buf: dict[tuple[int, ...], bytearray] = {}
+        # RFC 5904 / WiMAX continuation reassembly buffer, keyed on
+        # ``(vendor_id, vsa_type)``. Holds partial values across AVPs
+        # until a fragment without the More flag arrives.
+        self._vsa_continuation_buf: dict[tuple[int, int], bytearray] = {}
 
         packet = packet[20:]
         while packet:

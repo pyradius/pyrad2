@@ -71,10 +71,14 @@ concat     attribute may be split across multiple AVPs whose
            Typical examples: EAP-Message, CHAP-Challenge.
 ```
 
-Vendor format specifications honor the ``format=type_len,len_len`` syntax
-where ``type_len`` is 1, 2, or 4 and ``len_len`` is 0, 1, or 2. The
-default (RFC 2865 §5.26) is ``format=1,1``. Stored formats are applied
-when encoding and decoding Vendor-Specific Attributes for that vendor.
+Vendor format specifications honor the ``format=type_len,len_len[,c]``
+syntax where ``type_len`` is 1, 2, or 4 and ``len_len`` is 0, 1, or 2.
+The default (RFC 2865 §5.26) is ``format=1,1``. A trailing ``,c`` opts
+the vendor into the RFC 5904 long-packed-VSA convention used by WiMAX
+and a few others: a continuation byte is inserted after the type/length
+header whose high bit (0x80) flags fragments. Stored formats are
+applied when encoding and decoding Vendor-Specific Attributes for that
+vendor.
 
 RFC 6929 extended attributes are recognized via the dotted-code syntax
 (e.g. ``ATTRIBUTE Frag-Status 241.1 integer``) when the parent (type
@@ -165,7 +169,10 @@ class Attribute:
                 self.values.add(key, value)
 
 
-VENDOR_FORMAT_DEFAULT: tuple[int, int] = (1, 1)
+# Stored vendor format: (type_len, len_len, has_continuation). The
+# continuation flag corresponds to the trailing ``,c`` in FreeRADIUS's
+# ``format=`` syntax (RFC 5904 / WiMAX long-packed VSAs).
+VENDOR_FORMAT_DEFAULT: tuple[int, int, bool] = (1, 1, False)
 
 
 class Dictionary:
@@ -178,9 +185,11 @@ class Dictionary:
         vendors (bidict.BiDict): bidict mapping vendor name to vendor code
         attrindex (bidict.BiDict): bidict mapping
         attributes (bidict.BiDict): bidict mapping attribute name to attribute class
-        vendor_formats (dict[int, tuple[int, int]]): mapping vendor code to
-            its ``(type_len, len_len)`` VSA wire format. Vendors without an
-            explicit ``format=`` declaration default to ``(1, 1)``.
+        vendor_formats (dict[int, tuple[int, int, bool]]): mapping vendor
+            code to its ``(type_len, len_len, has_continuation)`` VSA wire
+            format. Vendors without an explicit ``format=`` declaration
+            default to ``(1, 1, False)``. ``has_continuation`` corresponds
+            to FreeRADIUS's ``,c`` (RFC 5904 long-packed VSAs).
     """
 
     def __init__(
@@ -205,7 +214,7 @@ class Dictionary:
         self.vendors.add("", 0)
         self.attrindex = bidict.BiDict()
         self.attributes: Dict[Hashable, Any] = {}
-        self.vendor_formats: Dict[int, tuple[int, int]] = {}
+        self.vendor_formats: Dict[int, tuple[int, int, bool]] = {}
         self.defer_parse: list[tuple[Dict, list]] = []
         self._include_base_dir = include_base_dir
 
@@ -215,11 +224,12 @@ class Dictionary:
         for i in dicts:
             self.read_dictionary(i)
 
-    def vendor_format(self, vendor_id: int) -> tuple[int, int]:
-        """Return the ``(type_len, len_len)`` VSA wire format for ``vendor_id``.
+    def vendor_format(self, vendor_id: int) -> tuple[int, int, bool]:
+        """Return the ``(type_len, len_len, has_continuation)`` VSA wire format.
 
-        Vendors without an explicit ``format=`` declaration use the RFC 2865
-        §5.26 default of one-byte type and one-byte length.
+        Vendors without an explicit ``format=`` declaration use the
+        RFC 2865 §5.26 default of one-byte type, one-byte length, no
+        continuation.
         """
         return self.vendor_formats.get(vendor_id, VENDOR_FORMAT_DEFAULT)
 
@@ -484,14 +494,26 @@ class Dictionary:
                     line=state["line"],
                 )
             try:
-                (_type, length) = tuple(int(a) for a in fmt[1].split(","))
+                fields = fmt[1].split(",")
+                if len(fields) not in (2, 3):
+                    raise ValueError
+                _type = int(fields[0])
+                length = int(fields[1])
+                has_continuation = False
+                if len(fields) == 3:
+                    # RFC 5904 / WiMAX continuation marker. The third
+                    # field is the literal letter ``c``; FreeRADIUS uses
+                    # no other token here.
+                    if fields[2] != "c":
+                        raise ValueError
+                    has_continuation = True
                 if _type not in [1, 2, 4] or length not in [0, 1, 2]:
                     raise ParseError(
                         "Unknown vendor format specification %s" % (fmt[1]),
                         file=state["file"],
                         line=state["line"],
                     )
-                vsa_format = (_type, length)
+                vsa_format = (_type, length, has_continuation)
             except ValueError:
                 raise ParseError(
                     "Syntax error in vendor specification",

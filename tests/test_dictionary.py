@@ -326,19 +326,23 @@ class TestDictionaryParsing:
             )
 
     def test_vendor_format_stored_and_retrievable(self):
-        # Default format is (1, 1) when no format= is declared.
+        # Default format is (1, 1, False) when no format= is declared.
         self.dict.read_dictionary(StringIO("VENDOR Cisco 9"))
-        assert self.dict.vendor_format(9) == (1, 1)
+        assert self.dict.vendor_format(9) == (1, 1, False)
 
         # Explicit format= persists on the dictionary.
         self.dict.read_dictionary(StringIO("VENDOR USR 429 format=4,0"))
-        assert self.dict.vendor_format(429) == (4, 0)
+        assert self.dict.vendor_format(429) == (4, 0, False)
 
         self.dict.read_dictionary(StringIO("VENDOR Big-Type 100 format=2,1"))
-        assert self.dict.vendor_format(100) == (2, 1)
+        assert self.dict.vendor_format(100) == (2, 1, False)
+
+        # ``,c`` opts the vendor into RFC 5904 long-packed VSA encoding.
+        self.dict.read_dictionary(StringIO("VENDOR WiMAX 24757 format=1,1,c"))
+        assert self.dict.vendor_format(24757) == (1, 1, True)
 
         # Unknown vendor ids fall back to the default.
-        assert self.dict.vendor_format(99999) == (1, 1)
+        assert self.dict.vendor_format(99999) == (1, 1, False)
 
     def test_begin_vendor_too_few_columns(self):
         with pytest.raises(ParseError, match="begin-vendor"):

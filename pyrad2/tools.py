@@ -27,12 +27,17 @@ def encode_string(origstr: str) -> bytes:
 
 
 def encode_octets(octetstring: str) -> str | bytes:
-    """Encode raw octet string (already in bytes)."""
-    # Check for max length of the hex encoded with 0x prefix, as a sanity check
+    """Encode raw octet string (already in bytes).
+
+    Length-capping is the AVP layer's job — fragmenting attributes
+    (``concat``, RFC 6929 ``long-extended``, RFC 5904 WiMAX
+    continuation) legitimately encode logical values larger than one
+    AVP's 253-byte payload field. This function only ensures the
+    string-form ``0x...`` hex input doesn't expand past what the AVP
+    layer can handle in one shot.
+    """
     if octetstring is None:
         return b""
-    elif len(octetstring) > 508:
-        raise ValueError("Can only encode strings of <= 253 characters")
 
     hexstring: str | bytes
     encoded_octets: str | bytes
@@ -47,9 +52,15 @@ def encode_octets(octetstring: str) -> str | bytes:
     else:
         encoded_octets = octetstring
 
-    # Check for the encoded value being longer than 253 chars
-    if len(encoded_octets) > 253:
-        raise ValueError("Can only encode strings of <= 253 characters")
+    # Hex literals (``0x...``) historically bounded to one AVP. Raw
+    # bytes and decimal forms are trusted: the AVP / fragmentation
+    # layer that calls us decides whether to chunk.
+    if isinstance(octetstring, (str, bytes)) and (
+        (isinstance(octetstring, bytes) and octetstring.startswith(b"0x"))
+        or (isinstance(octetstring, str) and octetstring.startswith("0x"))
+    ):
+        if len(encoded_octets) > 253:
+            raise ValueError("Can only encode strings of <= 253 characters")
 
     return encoded_octets
 
