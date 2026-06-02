@@ -1,12 +1,14 @@
 """Load every dictionary in the FreeRADIUS ``share/`` corpus.
 
 The corpus ships 244 dictionary files covering RFC base attributes plus
-~230 vendors (Cisco, Aruba, Juniper, 3GPP, Aerohive, etc.). Each one is
-a real-world artifact: if pyrad2 can parse it standalone, pyrad2 is
-compatible with that vendor's RADIUS deployment.
+~230 vendors (Cisco, Aruba, Juniper, 3GPP, Aerohive, etc.). Each vendor
+file is loaded stacked on top of an "RFC base" — the cumulative set of
+FreeRADIUS RFC dictionaries that pyrad2 can parse, assembled in the
+upstream root's ``$INCLUDE`` dependency order. This mirrors what a real
+deployment does: ``Dictionary("dictionary.rfc2865", ..., "dictionary.cisco")``.
 
 Files known to depend on features pyrad2 doesn't (yet) implement are
-listed in ``_INCOMPATIBLE_STANDALONE`` with a structured reason. They
+listed in ``_INCOMPATIBLE_ON_RFC_BASE`` with a structured reason. They
 ``xfail`` rather than hard-fail, so:
 
 * The suite stays green out of the box.
@@ -33,7 +35,7 @@ _CORPUS_DIR = Path(__file__).parent / "_corpus" / "dictionaries" / "share"
 # Known reasons a FreeRADIUS dictionary won't load with pyrad2 today.
 # Each is a real limitation in pyrad2 (or in the dictionary itself);
 # extending pyrad2 to remove a category should be followed by removing
-# the corresponding entries from ``_INCOMPATIBLE_STANDALONE`` so the
+# the corresponding entries from ``_INCOMPATIBLE_ON_RFC_BASE`` so the
 # tests start protecting the new capability.
 _REASONS = {
     "wimax-continuation": (
@@ -46,61 +48,57 @@ _REASONS = {
         "extended attributes) — pyrad2's dictionary parser only "
         "supports 2-level codes today"
     ),
-    "needs-parent": (
-        "redefines VALUE constants for, or references vendors declared "
-        "by, attributes defined in another dictionary — only loadable "
-        "stacked on a parent (typically the RFC base)"
+    "needs-freeradius-base": (
+        "depends on attributes / vendor IDs declared in "
+        "dictionary.freeradius (or its internal companion), which is "
+        "itself blocked on nested-TLV support — unblocks transitively "
+        "once 'nested-tlv' is implemented"
     ),
     "fr-quirk-typo": (
         "FreeRADIUS dict uses a capitalised data type token like "
         "'String' instead of 'string' — pyrad2 is stricter about case"
     ),
+    "fr-dict-forward-ref": (
+        "FreeRADIUS dict declares VALUE entries for an attribute that "
+        "is never defined in any RFC dict — appears to be a "
+        "forward-reference bug in the FreeRADIUS dict itself"
+    ),
 }
 
 
-_INCOMPATIBLE_STANDALONE: dict[str, str] = {
-    "dictionary.aruba": "needs-parent",
-    "dictionary.ascend": "needs-parent",
-    "dictionary.bay": "needs-parent",
-    "dictionary.bintec": "needs-parent",
-    "dictionary.chillispot": "needs-parent",
-    "dictionary.columbia_university": "needs-parent",
-    "dictionary.compat": "needs-parent",
-    "dictionary.dhcp": "needs-parent",
-    "dictionary.freedhcp": "needs-parent",
+_INCOMPATIBLE_ON_RFC_BASE: dict[str, str] = {
+    # Forward-reference bug in dictionary.aruba itself.
+    "dictionary.aruba": "fr-dict-forward-ref",
+    # FreeRADIUS internal / DHCP companions — all blocked behind
+    # dictionary.freeradius, which is itself nested-tlv blocked.
+    "dictionary.compat": "needs-freeradius-base",
+    "dictionary.dhcp": "needs-freeradius-base",
+    "dictionary.freedhcp": "needs-freeradius-base",
     "dictionary.freeradius": "nested-tlv",
-    "dictionary.freeradius.evs5": "needs-parent",
-    "dictionary.freeradius.internal": "needs-parent",
-    "dictionary.hp": "needs-parent",
-    "dictionary.iana": "needs-parent",
+    "dictionary.freeradius.evs5": "needs-freeradius-base",
+    "dictionary.freeradius.internal": "needs-freeradius-base",
+    # Capitalised "String" in the type column.
     "dictionary.juniper": "fr-quirk-typo",
-    "dictionary.manzara": "needs-parent",
-    "dictionary.openser": "needs-parent",
-    "dictionary.rfc2867": "needs-parent",
-    "dictionary.rfc3576": "needs-parent",
-    "dictionary.rfc3580": "needs-parent",
-    "dictionary.rfc4603": "needs-parent",
-    "dictionary.rfc5176": "needs-parent",
-    "dictionary.rfc5607": "needs-parent",
+    # RFC 6929 extended attributes — 3+ level codes.
     "dictionary.rfc7499": "nested-tlv",
     "dictionary.rfc7930": "nested-tlv",
     "dictionary.rfc8045": "nested-tlv",
     "dictionary.rfc8559": "nested-tlv",
-    "dictionary.sg": "needs-parent",
+    # WiMAX VSA continuation marker (RFC 5904).
     "dictionary.telrad": "nested-tlv",
-    "dictionary.usr.illegal": "needs-parent",
-    "dictionary.walabi": "needs-parent",
     "dictionary.wimax": "wimax-continuation",
     "dictionary.wimax.alvarion": "wimax-continuation",
     "dictionary.wimax.wichorus": "wimax-continuation",
 }
 
-# Floor on how many vendor dictionaries must load. Bump deliberately
-# when pyrad2 grows a new capability; never lower without a write-up.
-_MIN_LOADABLE_DICTIONARIES = 209
+# Floor on how many vendor dictionaries must load on top of the RFC
+# base. Bump deliberately when pyrad2 grows a new capability; never
+# lower without a write-up.
+_MIN_LOADABLE_DICTIONARIES = 227
 
 
 _DICTIONARY_NAME_RE = re.compile(r"^dictionary\.")
+_RFC_INCLUDE_RE = re.compile(r"^\$INCLUDE\s+(dictionary\.rfc\S+)\s*$")
 
 
 def _vendor_dictionary_files() -> list[Path]:
@@ -116,7 +114,7 @@ def _vendor_dictionary_files() -> list[Path]:
 
 
 def _pytest_param(vendor_dict: Path) -> pytest.ParameterSet:
-    reason_key = _INCOMPATIBLE_STANDALONE.get(vendor_dict.name)
+    reason_key = _INCOMPATIBLE_ON_RFC_BASE.get(vendor_dict.name)
     marks = []
     if reason_key is not None:
         # ``strict=True`` is what makes the list self-maintaining: when
@@ -132,48 +130,89 @@ def _pytest_param(vendor_dict: Path) -> pytest.ParameterSet:
     return pytest.param(vendor_dict, id=vendor_dict.name, marks=marks)
 
 
+@pytest.fixture(scope="session")
+def freeradius_rfc_base_files(freeradius_dictionaries_dir: Path) -> tuple[Path, ...]:
+    """Cumulatively-loadable RFC dicts in FreeRADIUS root inclusion order.
+
+    Walks the ``$INCLUDE dictionary.rfc*`` lines from upstream's root
+    ``share/dictionary``, in order. Each file that loads cleanly on top
+    of the chain so far is added; ones that fail (currently the four
+    nested-TLV RFC dicts) are skipped. The returned tuple is the
+    "compatible RFC base" every vendor test stacks against.
+    """
+
+    root_text = (freeradius_dictionaries_dir / "dictionary").read_text()
+    base: list[Path] = []
+    for raw_line in root_text.splitlines():
+        m = _RFC_INCLUDE_RE.match(raw_line.strip())
+        if not m:
+            continue
+        path = freeradius_dictionaries_dir / m.group(1)
+        if not path.is_file():
+            continue
+        try:
+            Dictionary(*[str(p) for p in base], str(path))
+        except Exception:
+            # Tracked separately as nested-tlv / fr-quirk in
+            # _INCOMPATIBLE_ON_RFC_BASE — don't fail the base build.
+            continue
+        base.append(path)
+    return tuple(base)
+
+
 @pytest.mark.parametrize(
     "vendor_dict", [_pytest_param(p) for p in _vendor_dictionary_files()]
 )
-def test_vendor_dictionary_loads_standalone(
-    freeradius_dictionaries_dir: Path, vendor_dict: Path
+def test_vendor_dictionary_loads_on_rfc_base(
+    freeradius_dictionaries_dir: Path,
+    freeradius_rfc_base_files: tuple[Path, ...],
+    vendor_dict: Path,
 ) -> None:
-    """Each vendor dictionary loads standalone without raising.
+    """Each vendor dictionary loads on top of the FreeRADIUS RFC base.
 
-    Standalone load is a strict test — vendor dictionaries that depend
-    on a parent context are expected to fail and are listed in
-    ``_INCOMPATIBLE_STANDALONE``. Anything else is a regression.
+    Stacked load is the higher-signal test — it matches what a real
+    pyrad2 user does when initialising a dictionary for a deployment.
+    Vendor files that still fail in this configuration are listed in
+    ``_INCOMPATIBLE_ON_RFC_BASE`` with a structured reason; anything
+    else is a regression.
     """
 
-    Dictionary(str(vendor_dict))
+    Dictionary(
+        *[str(p) for p in freeradius_rfc_base_files],
+        str(vendor_dict),
+    )
 
 
 def test_minimum_loadable_dictionary_count(
     freeradius_dictionaries_dir: Path,
+    freeradius_rfc_base_files: tuple[Path, ...],
 ) -> None:
     """Guard against silent regressions in dictionary parser coverage.
 
-    Counts how many vendor dictionaries load standalone. The floor
-    catches a class of regression that the per-dict test misses: a
-    pyrad2 change that breaks several previously-passing dicts at once
-    would show up as many individual failures (loud), but if someone
-    "fixes" the test by quietly expanding ``_INCOMPATIBLE_STANDALONE``,
-    this count would drop and trip the floor.
+    Counts how many dictionaries load stacked on the RFC base. The
+    floor catches a class of regression that the per-dict test misses:
+    a pyrad2 change that breaks several previously-passing dicts at
+    once would show up as many individual failures (loud), but if
+    someone "fixes" the test by quietly expanding
+    ``_INCOMPATIBLE_ON_RFC_BASE``, this count would drop and trip the
+    floor.
     """
 
+    base_strs = [str(p) for p in freeradius_rfc_base_files]
     loadable = 0
     for vendor_dict in _vendor_dictionary_files():
-        if vendor_dict.name in _INCOMPATIBLE_STANDALONE:
+        if vendor_dict.name in _INCOMPATIBLE_ON_RFC_BASE:
             continue
         try:
-            Dictionary(str(vendor_dict))
+            Dictionary(*base_strs, str(vendor_dict))
         except Exception:
             continue
         loadable += 1
 
     assert loadable >= _MIN_LOADABLE_DICTIONARIES, (
-        f"only {loadable} FreeRADIUS dictionaries loaded standalone; "
-        f"expected at least {_MIN_LOADABLE_DICTIONARIES}. Either pyrad2 "
-        f"regressed or someone expanded _INCOMPATIBLE_STANDALONE "
-        f"without bumping the floor — investigate before changing it."
+        f"only {loadable} FreeRADIUS dictionaries loaded on the RFC "
+        f"base; expected at least {_MIN_LOADABLE_DICTIONARIES}. Either "
+        f"pyrad2 regressed or someone expanded "
+        f"_INCOMPATIBLE_ON_RFC_BASE without bumping the floor — "
+        f"investigate before changing it."
     )
