@@ -1269,8 +1269,8 @@
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>make<span class="w"> </span>scenario_radsec<span class="w">   </span><span class="c1"># RadSec over mutual TLS (RFC 6614)</span>
 </span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>make<span class="w"> </span>demo<span class="w">              </span><span class="c1"># all of the above, in sequence</span>
 </span></code></pre></div>
-<p>To <strong>watch the actual bytes</strong> on the wire, set <code>PYRAD2_TRACE=1</code>:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">PYRAD2_TRACE</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>make<span class="w"> </span>scenario_auth
+<p>To <strong>watch the actual bytes</strong> on the wire, set <code>PYRAD2_TRACE=1</code> <strong>and</strong> <code>PYRAD2_TRACE_UNSAFE=1</code>:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">PYRAD2_TRACE</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="nv">PYRAD2_TRACE_UNSAFE</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>make<span class="w"> </span>scenario_auth
 </span></code></pre></div>
 <p>Every packet is dumped with direction (<code>→</code> outgoing, <code>←</code> incoming), code, id, length, authenticator, decoded attributes, and a hex view of the raw bytes:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>[pyrad2 trace] → AccessRequest id=5 len=39
@@ -1284,6 +1284,10 @@
 </span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>        0010  9f 51 ed 81 01 07 61 6c 69 63 65 04 06 c0 a8 01  .Q....alice.....
 </span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>        0020  0a 06 06 00 00 00 01                             .......
 </span></code></pre></div>
+<div class="admonition danger">
+<p class="admonition-title">Why two env vars?</p>
+<p>The trace dumps the Request Authenticator and the <strong>obfuscated</strong> <code>User-Password</code> verbatim. Anyone who later reads the log archive <em>and</em> knows the shared secret (commonly stored in the same config the operator reading the log can see) can recover the plaintext password — the RFC 2865 obfuscation is fully reversible with both inputs. <code>PYRAD2_TRACE_UNSAFE=1</code> is an acknowledgement that the destination of these log lines is access-controlled at the same level as the shared secret. Setting <code>PYRAD2_TRACE=1</code> without it logs a warning and keeps the trace <strong>disabled</strong>.</p>
+</div>
 <p><code>PYRAD2_TRACE</code> works on any script - scenarios, examples, or your own code - and costs nothing when off.</p>
 <div class="admonition tip">
 <p class="admonition-title">Scenarios vs examples</p>

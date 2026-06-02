@@ -1931,6 +1931,10 @@
 </span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>    <span class="k">return</span> <span class="n">reply</span>
 </span></code></pre></div>
 <p>The reply path is fully automatic: <code>create_reply()</code> propagates <code>radius_version</code> and the Token; <code>reply_packet()</code> skips MD5 / Message-Authenticator when v1.1 is set.</p>
+<div class="admonition tip">
+<p class="admonition-title">Watching for misconfigured shared secrets</p>
+<p>If the receiver's shared secret doesn't match the sender's, <code>pw_decrypt</code> returns lossy garbage — and now logs a <code>WARNING</code> saying so. If you see <code>AuthPacket.pw_decrypt produced non-UTF-8 bytes</code> in production logs, check the <code>RemoteHost</code> secret for that NAS before chasing user-level auth bugs.</p>
+</div>
 
 
 
