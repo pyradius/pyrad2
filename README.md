@@ -2,7 +2,7 @@
 
 # pyrad2
 
-[![Tests](https://github.com/nicholasamorim/pyrad2/actions/workflows/python-test.yml/badge.svg)](https://github.com/nicholasamorim/pyrad2/actions/workflows/python-test.yml)
+[![Tests](https://github.com/pyradius/pyrad2/actions/workflows/python-test.yml/badge.svg)](https://github.com/pyradius/pyrad2/actions/workflows/python-test.yml)
 [![python](https://img.shields.io/badge/Python-3.12+-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/uv)
@@ -12,7 +12,7 @@
 
 pyrad2 gives you the protocol - packet encoding, dictionary parsing, transport handling, retransmission, TLS - so you can write the business logic. Build an authentication backend, a CoA proxy, a RadSec accounting collector, or a network-access controller without touching wire formats.
 
-> 📚 **Full documentation: [nicholasamorim.github.io/pyrad2](https://nicholasamorim.github.io/pyrad2/)**
+> 📚 **Full documentation: [pyradius.github.io/pyrad2](https://pyradius.github.io/pyrad2/)**
 
 ## Install
 
@@ -39,7 +39,7 @@ if reply.code == PacketType.AccessAccept:
     print("Welcome,", reply["User-Name"][0])
 ```
 
-Head to the [Getting Started guide](https://nicholasamorim.github.io/pyrad2/setup/) for the full walkthrough.
+Head to the [Getting Started guide](https://pyradius.github.io/pyrad2/setup/) for the full walkthrough.
 
 ## What's in the box
 
@@ -83,11 +83,11 @@ PYRAD2_TRACE=1 make scenario_auth
 
 ## Documentation
 
-- **[Getting Started](https://nicholasamorim.github.io/pyrad2/setup/)** - install, RADIUS in one minute, run an exchange
-- **[Running a Server](https://nicholasamorim.github.io/pyrad2/server/)** - auth, accounting, CoA, RadSec, RADIUS/1.1
-- **[Making Requests](https://nicholasamorim.github.io/pyrad2/client/)** - clients, EAP, health checks, RadSec
-- **[Dictionary Reference](https://nicholasamorim.github.io/pyrad2/dictionary/)** - every supported type and option
-- **[Migrating from pyrad](https://nicholasamorim.github.io/pyrad2/compatibility/)** - breaking changes since 2.0
+- **[Getting Started](https://pyradius.github.io/pyrad2/setup/)** - install, RADIUS in one minute, run an exchange
+- **[Running a Server](https://pyradius.github.io/pyrad2/server/)** - auth, accounting, CoA, RadSec, RADIUS/1.1
+- **[Making Requests](https://pyradius.github.io/pyrad2/client/)** - clients, EAP, health checks, RadSec
+- **[Dictionary Reference](https://pyradius.github.io/pyrad2/dictionary/)** - every supported type and option
+- **[Migrating from pyrad](https://pyradius.github.io/pyrad2/compatibility/)** - breaking changes since 2.0
 
 ## Tests
 
@@ -101,6 +101,6 @@ pyrad2 is currently maintained by Nicholas Amorim.
 
 pyrad was written by [Wichert Akkerman](wichert@wiggy.net) and is maintained by Christian Giese (GIC-de) and Istvan Ruzman (Istvan91).
 
-This project is licensed under a BSD license. Copyright and license information can be found in [LICENSE.txt](https://github.com/nicholasamorim/pyrad2/blob/master/LICENSE.txt).
+This project is licensed under a BSD license. Copyright and license information can be found in [LICENSE.txt](https://github.com/pyradius/pyrad2/blob/master/LICENSE.txt).
 
-Bugs and wishes can be submitted in the pyrad2 [issue tracker](https://github.com/nicholasamorim/pyrad2/issues) on GitHub. PRs are very welcome.
+Bugs and wishes can be submitted in the pyrad2 [issue tracker](https://github.com/pyradius/pyrad2/issues) on GitHub. PRs are very welcome.

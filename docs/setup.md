@@ -77,7 +77,7 @@ Every packet is dumped with direction (`→` outgoing, `←` incoming), code, id
 
 !!! tip "Scenarios vs examples"
 
-    Scenarios are **runnable explanations** - don't edit them. When you're ready to write your own integration, copy from [`examples/`](https://github.com/nicholasamorim/pyrad2/tree/master/examples) instead: those are operational scripts (one terminal per process) designed to be cribbed.
+    Scenarios are **runnable explanations** - don't edit them. When you're ready to write your own integration, copy from [`examples/`](https://github.com/pyradius/pyrad2/tree/master/examples) instead: those are operational scripts (one terminal per process) designed to be cribbed.
 
 ## 4. Load a dictionary
 
@@ -91,8 +91,8 @@ ATTRIBUTE CHAP-Password  3  octets
 
 Two reference dictionaries are included in the repo:
 
-- [`examples/dictionary`](https://github.com/nicholasamorim/pyrad2/blob/master/examples/dictionary) - a working starter dictionary
-- [`examples/dictionary.freeradius`](https://github.com/nicholasamorim/pyrad2/blob/master/examples/dictionary.freeradius) - FreeRADIUS vendor-specific attributes
+- [`examples/dictionary`](https://github.com/pyradius/pyrad2/blob/master/examples/dictionary) - a working starter dictionary
+- [`examples/dictionary.freeradius`](https://github.com/pyradius/pyrad2/blob/master/examples/dictionary.freeradius) - FreeRADIUS vendor-specific attributes
 
 Drop one (or both) into your project, then load it:
 

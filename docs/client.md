@@ -35,7 +35,7 @@ if reply.code == PacketType.AccessAccept:
 
 That's the whole loop: build, send, inspect.
 
-A complete runnable version with logging and error handling lives in [`examples/auth_async.py`](https://github.com/nicholasamorim/pyrad2/blob/master/examples/auth_async.py).
+A complete runnable version with logging and error handling lives in [`examples/auth_async.py`](https://github.com/pyradius/pyrad2/blob/master/examples/auth_async.py).
 
 !!! warning "Same dictionary on both sides"
 
@@ -165,7 +165,7 @@ client = RadSecClient(
 )
 ```
 
-A runnable example is in [`examples/auth_radsec.py`](https://github.com/nicholasamorim/pyrad2/blob/master/examples/auth_radsec.py).
+A runnable example is in [`examples/auth_radsec.py`](https://github.com/pyradius/pyrad2/blob/master/examples/auth_radsec.py).
 
 ## RADIUS/1.1 (RFC 9765)
 

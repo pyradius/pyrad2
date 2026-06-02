@@ -31,10 +31,10 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/nicholasamorim/pyrad2"
-Documentation = "https://nicholasamorim.github.io/pyrad2/"
-Issues = "https://github.com/nicholasamorim/pyrad2/issues"
-Changelog = "https://github.com/nicholasamorim/pyrad2/releases"
+Repository = "https://github.com/pyradius/pyrad2"
+Documentation = "https://pyradius.github.io/pyrad2/"
+Issues = "https://github.com/pyradius/pyrad2/issues"
+Changelog = "https://github.com/pyradius/pyrad2/releases"
 
 [dependency-groups]
 dev = [

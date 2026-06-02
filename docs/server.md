@@ -60,7 +60,7 @@ That's a working RADIUS server. The next sections explain what's happening and h
 
 !!! tip "Sync or async?"
 
-    The example above is async - recommended for new code. A synchronous `Server` class exists in `pyrad2.server` for legacy compatibility, but sync support **may be dropped in a future release**. Use [`server_async.py`](https://github.com/nicholasamorim/pyrad2/blob/master/examples/server_async.py) as your starting template.
+    The example above is async - recommended for new code. A synchronous `Server` class exists in `pyrad2.server` for legacy compatibility, but sync support **may be dropped in a future release**. Use [`server_async.py`](https://github.com/pyradius/pyrad2/blob/master/examples/server_async.py) as your starting template.
 
 ## Handling requests
 
@@ -254,7 +254,7 @@ When the server is ready you'll see:
 RADSEC Server with mutual TLS running on ('0.0.0.0', 2083)
 ```
 
-A full example lives in [`examples/server_radsec.py`](https://github.com/nicholasamorim/pyrad2/blob/master/examples/server_radsec.py). Test certificates ship in [`examples/certs/`](https://github.com/nicholasamorim/pyrad2/blob/master/examples/certs/).
+A full example lives in [`examples/server_radsec.py`](https://github.com/pyradius/pyrad2/blob/master/examples/server_radsec.py). Test certificates ship in [`examples/certs/`](https://github.com/pyradius/pyrad2/blob/master/examples/certs/).
 
 !!! note "Async only"
 
@@ -262,7 +262,7 @@ A full example lives in [`examples/server_radsec.py`](https://github.com/nichola
 
 ### Health-checking a RadSec server
 
-Status-Server health checks reuse the same TLS/TCP connection as everything else. Use [`examples/status_radsec.py`](https://github.com/nicholasamorim/pyrad2/blob/master/examples/status_radsec.py) - the UDP `status.py` script can't reach a RadSec server.
+Status-Server health checks reuse the same TLS/TCP connection as everything else. Use [`examples/status_radsec.py`](https://github.com/pyradius/pyrad2/blob/master/examples/status_radsec.py) - the UDP `status.py` script can't reach a RadSec server.
 
 
 ## RADIUS/1.1 (RFC 9765)

@@ -2,7 +2,7 @@
 
 The dictionary is what pyrad2 reads to translate `User-Name` into "attribute code 1, type string" and back. This page documents every dictionary feature pyrad2 understands.
 
-For a hands-on tour, run [`examples/dictionary_features.py`](https://github.com/nicholasamorim/pyrad2/blob/master/examples/dictionary_features.py) - backed by [`examples/dictionary.extended`](https://github.com/nicholasamorim/pyrad2/blob/master/examples/dictionary.extended) - which exercises every feature below:
+For a hands-on tour, run [`examples/dictionary_features.py`](https://github.com/pyradius/pyrad2/blob/master/examples/dictionary_features.py) - backed by [`examples/dictionary.extended`](https://github.com/pyradius/pyrad2/blob/master/examples/dictionary.extended) - which exercises every feature below:
 
 ```bash
 make dictionary_features
@@ -125,4 +125,4 @@ The wire encoding wraps the vendor id and vendor type into the extended payload.
 
 - TLV nesting deeper than two levels.
 
-If you hit something else that FreeRADIUS handles but pyrad2 doesn't, please [open an issue](https://github.com/nicholasamorim/pyrad2/issues).
+If you hit something else that FreeRADIUS handles but pyrad2 doesn't, please [open an issue](https://github.com/pyradius/pyrad2/issues).

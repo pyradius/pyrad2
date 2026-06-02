@@ -2,7 +2,7 @@
 
 <img src="logo.png" width="10%" height="auto">
 
-[![Tests](https://github.com/nicholasamorim/pyrad2/actions/workflows/python-test.yml/badge.svg)](https://github.com/nicholasamorim/pyrad2/actions/workflows/python-test.yml)
+[![Tests](https://github.com/pyradius/pyrad2/actions/workflows/python-test.yml/badge.svg)](https://github.com/pyradius/pyrad2/actions/workflows/python-test.yml)
 [![python](https://img.shields.io/badge/Python-3.12+-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/uv)
@@ -10,7 +10,7 @@
 
 **A modern Python toolkit for building RADIUS clients and servers.**
 
-[pyrad2](https://github.com/nicholasamorim/pyrad2) gives you the protocol - packet encoding, dictionary parsing, transport handling, retransmission, TLS - so you can write the business logic. Build an authentication backend, a CoA proxy, a RadSec accounting collector, or a network-access controller without touching wire formats.
+[pyrad2](https://github.com/pyradius/pyrad2) gives you the protocol - packet encoding, dictionary parsing, transport handling, retransmission, TLS - so you can write the business logic. Build an authentication backend, a CoA proxy, a RadSec accounting collector, or a network-access controller without touching wire formats.
 
 ```python
 from pyrad2.client_async import ClientAsync
@@ -65,6 +65,6 @@ pyrad2 is a **library**, not a daemon. It is not a drop-in replacement for [Free
 
 ## Project
 
-- **Source**: [github.com/nicholasamorim/pyrad2](https://github.com/nicholasamorim/pyrad2)
-- **Releases**: [Release notes](https://github.com/nicholasamorim/pyrad2/releases)
-- **Issues & PRs**: [Issue tracker](https://github.com/nicholasamorim/pyrad2/issues) - PRs are very welcome.
+- **Source**: [github.com/pyradius/pyrad2](https://github.com/pyradius/pyrad2)
+- **Releases**: [Release notes](https://github.com/pyradius/pyrad2/releases)
+- **Issues & PRs**: [Issue tracker](https://github.com/pyradius/pyrad2/issues) - PRs are very welcome.
