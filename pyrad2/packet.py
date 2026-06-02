@@ -738,15 +738,50 @@ class Packet(OrderedDict):
         (key, value) = self._encode_key_values(key, value)
 
         if attr.is_sub_attribute and not (attr.parent and attr.parent.type == "evs"):
-            # TLV-style nesting under the parent code. EVS-VSAs skip this:
-            # their 4-tuple key already identifies the slot uniquely so they
-            # live flat at the top level of the packet dict.
-            tlv = self.setdefault(self._encode_key(attr.parent.name), {})
+            # TLV-style nesting under the parent chain. For a 2-level
+            # sub-attribute this is just ``self[parent_code][code]``; for
+            # 3+ levels it's ``self[grandparent][parent_code][code]`` etc.
+            # EVS-VSAs skip this entirely: their 4-tuple key already
+            # identifies the slot uniquely so they live flat at the top
+            # level of the packet dict.
+            tlv = self._tlv_storage_for(attr)
             encoded = tlv.setdefault(key, [])
         else:
             encoded = self.setdefault(key, [])
 
         encoded.extend(value)
+
+    def _tlv_storage_for(self, attr: Attribute) -> dict:
+        """Walk the parent chain to the dict that should hold ``attr``.
+
+        For a 2-level sub-attribute returns ``self[parent_code]`` (creating
+        it as a dict on the way). For 3+ levels it descends one nested
+        dict per level: ``self[241][5]`` for an attribute declared as
+        ``241.5.X``, and so on. The caller stores the leaf at
+        ``container[attr.code]``.
+        """
+
+        # chain[0] is the outermost (top-level) parent; chain[-1] is the
+        # immediate parent of ``attr``.
+        chain: list[Attribute] = []
+        cur: Optional[Attribute] = attr.parent
+        while cur is not None:
+            chain.append(cur)
+            cur = cur.parent if cur.is_sub_attribute else None
+        chain.reverse()
+
+        container: dict = self
+        for i, parent in enumerate(chain):
+            # Top-level parent uses its full encoded key (which is just
+            # the integer code for Extended attributes, a 2-tuple for
+            # vendor attributes). Every level below it nests under the
+            # raw child code.
+            level_key = self._encode_key(parent.name) if i == 0 else parent.code
+            sub = container.setdefault(level_key, {})
+            if not isinstance(sub, dict):
+                raise PacketError(f"storage at level {level_key} is not a TLV map")
+            container = sub
+        return container
 
     def set_obfuscated(self, name: str, value: Any) -> None:
         """Store an obfuscated attribute, deferring encoding until send.
@@ -924,23 +959,35 @@ class Packet(OrderedDict):
         values = super().__getitem__(self._encode_key(key))
         attr = self.dict.attributes[key]
         if attr.type in ("tlv", "extended", "long-extended"):
-            # Container attributes — return a map from sub-attribute name to
-            # its decoded values. Storage shape is identical across TLV and
-            # RFC 6929 extended/long-extended containers.
-            map_result: dict = {}
-            for sub_attr_key, sub_attr_val in values.items():
-                sub_attr_name = attr.sub_attributes[sub_attr_key]
-                sub_attr = self.dict.attributes[sub_attr_name]
-                for v in sub_attr_val:
-                    map_result.setdefault(sub_attr_name, []).append(
-                        self._decode_value(sub_attr, v)
-                    )
-            return map_result
+            # Container attributes — return a map from sub-attribute name
+            # to its decoded values. For 3+ level dictionaries a child
+            # slot may itself be a TLV container; that nested map gets
+            # decoded recursively into the same {name: [values]} shape.
+            return self._decode_container_values(attr, values)
         else:
             list_result: list = []
             for v in values:
                 list_result.append(self._decode_value(attr, v))
             return list_result
+
+    def _decode_container_values(self, container_attr: Attribute, stored: dict) -> dict:
+        """Turn ``{code: stored}`` into ``{name: decoded}``, recursing on nested TLV."""
+
+        result: dict = {}
+        for sub_attr_key, sub_attr_val in stored.items():
+            sub_attr_name = container_attr.sub_attributes[sub_attr_key]
+            sub_attr = self.dict.attributes[sub_attr_name]
+            if isinstance(sub_attr_val, dict):
+                # Nested TLV — descend.
+                result[sub_attr_name] = self._decode_container_values(
+                    sub_attr, sub_attr_val
+                )
+            else:
+                for v in sub_attr_val:
+                    result.setdefault(sub_attr_name, []).append(
+                        self._decode_value(sub_attr, v)
+                    )
+        return result
 
     def __contains__(self, key: Hashable) -> bool:
         try:
@@ -1178,11 +1225,25 @@ class Packet(OrderedDict):
         tlv_attr = self.dict.attributes[self._decode_key(tlv_key)]
         curr_avp = b""
         avps = []
-        max_sub_attribute_len = max(map(lambda item: len(item[1]), tlv_value.items()))
+        # Nested TLV children store as a single dict rather than a list
+        # of values; count them as one "instance" for the round-robin
+        # loop below.
+        max_sub_attribute_len = max(
+            1 if isinstance(datalst, dict) else len(datalst)
+            for datalst in tlv_value.values()
+        )
         for i in range(max_sub_attribute_len):
             sub_attr_encoding = b""
             for code, datalst in tlv_value.items():
-                if i < len(datalst):
+                if isinstance(datalst, dict):
+                    if i > 0:
+                        # Nested TLV slots emit once on the first pass.
+                        continue
+                    chain = self._encode_tlv_chain(datalst)
+                    sub_attr_encoding += (
+                        struct.pack("!BB", code, len(chain) + 2) + chain
+                    )
+                elif i < len(datalst):
                     sub_attr_encoding += self._pkt_encode_attribute(code, datalst[i])
             # split above 255. assuming len of one instance of all sub tlvs is lower than 255
             if (len(sub_attr_encoding) + len(curr_avp)) < 245:
@@ -1242,16 +1303,52 @@ class Packet(OrderedDict):
             return [b""]
         return [data[i : i + max_chunk] for i in range(0, len(data), max_chunk)]
 
+    def _encode_tlv_chain(self, mapping: dict) -> bytes:
+        """Encode a ``{code: values_or_nested_dict}`` map as a TLV chain.
+
+        Used wherever a TLV container's value needs to be linearised on
+        the wire — both for top-level TLV attributes and for the value
+        field of a nested TLV slot under an Extended attribute. Recurses
+        through dict-valued children so 3+ level dictionaries
+        (e.g. ``241.5.1``) emit correctly.
+        """
+
+        out = b""
+        for code, datalst in mapping.items():
+            if isinstance(datalst, dict):
+                inner = self._encode_tlv_chain(datalst)
+                out += struct.pack("!BB", code, 2 + len(inner)) + inner
+            else:
+                for value in datalst:
+                    out += struct.pack("!BB", code, 2 + len(value)) + value
+        return out
+
     def _pkt_encode_extended(self, parent_code: int, sub_attributes: dict) -> bytes:
         """Encode RFC 6929 extended attributes (types 241-244).
 
         Each sub-attribute value is emitted as one AVP of the form
         ``[parent][len][ext_type][value]``. The single-byte length field
         caps the value at 252 bytes; longer values require a parent
-        declared as ``long-extended``.
+        declared as ``long-extended``. Slots whose value is itself a
+        nested map (3+ level dictionaries) are flattened into a TLV
+        chain before being wrapped in the Extended envelope.
         """
         result = b""
         for ext_type, values in sub_attributes.items():
+            if isinstance(values, dict):
+                # Nested TLV under this Extended slot — collapse the
+                # whole nested map into one chain of inner AVPs and
+                # emit a single Extended wrapper around it.
+                chain = self._encode_tlv_chain(values)
+                if len(chain) > 252:
+                    raise ValueError(
+                        "Extended attribute value too long; declare the "
+                        "parent as long-extended to enable fragmentation"
+                    )
+                result += (
+                    struct.pack("!BBB", parent_code, 3 + len(chain), ext_type) + chain
+                )
+                continue
             for value in values:
                 if len(value) > 252:
                     raise ValueError(
@@ -1270,13 +1367,19 @@ class Packet(OrderedDict):
 
         Values larger than 251 bytes are fragmented across multiple AVPs.
         The More flag (bit 0x80 of the flags byte) is set on every
-        fragment except the last so the receiver can reassemble.
+        fragment except the last so the receiver can reassemble. Nested
+        TLV slots (3+ level dictionaries) are flattened into a TLV chain
+        first; the chain is then fragmented as a single logical value.
         """
         from pyrad2.constants import LONG_EXTENDED_MORE_FLAG
 
         result = b""
         for ext_type, values in sub_attributes.items():
-            for value in values:
+            if isinstance(values, dict):
+                value_iter: list[bytes] = [self._encode_tlv_chain(values)]
+            else:
+                value_iter = list(values)
+            for value in value_iter:
                 chunks = self._split_into_chunks(value, 251)
                 for index, chunk in enumerate(chunks):
                     more = LONG_EXTENDED_MORE_FLAG if index < len(chunks) - 1 else 0
@@ -1428,12 +1531,67 @@ class Packet(OrderedDict):
 
     def _pkt_decode_tlv_attribute(self, code, data):
         sub_attributes = self.setdefault(code, {})
-        loc = 0
+        parent_attr = self.dict.attributes.get(self._decode_key(code))
+        self._decode_tlv_chain_into(parent_attr, sub_attributes, data)
 
+    def _decode_tlv_chain_into(
+        self,
+        parent_attr: Optional[Attribute],
+        target: dict,
+        data: bytes,
+    ) -> None:
+        """Parse a TLV chain into ``target``, recursing on nested ``tlv`` slots.
+
+        ``parent_attr`` is the dictionary attribute whose value bytes
+        these are — used to look up sub-attribute types so a nested
+        ``tlv`` slot's payload gets parsed instead of stored as raw
+        bytes. ``None`` falls back to flat (legacy) parsing.
+        """
+
+        loc = 0
         while loc < len(data):
-            atype, length = struct.unpack("!BB", data[loc : loc + 2])[0:2]
-            sub_attributes.setdefault(atype, []).append(data[loc + 2 : loc + length])
+            if loc + 2 > len(data):
+                break
+            atype, length = struct.unpack("!BB", data[loc : loc + 2])
+            if length < 2:
+                break
+            # ``data[loc+2:loc+length]`` matches the pre-existing
+            # lenient behaviour: declared lengths that overshoot the
+            # available bytes truncate to what's there rather than
+            # rejecting the AVP.
+            inner = data[loc + 2 : loc + length]
+            child_attr = self._tlv_child_attr(parent_attr, atype)
+            if child_attr is not None and child_attr.type == "tlv":
+                nested = target.setdefault(atype, {})
+                if not isinstance(nested, dict):
+                    nested = {}
+                    target[atype] = nested
+                self._decode_tlv_chain_into(child_attr, nested, inner)
+            else:
+                target.setdefault(atype, []).append(inner)
             loc += length
+
+    def _tlv_child_attr(
+        self, parent_attr: Optional[Attribute], child_code: int
+    ) -> Optional[Attribute]:
+        """Look up the Attribute for ``parent_attr.sub_attributes[child_code]``."""
+
+        if parent_attr is None:
+            return None
+        sub_name = parent_attr.sub_attributes.get(child_code)
+        if sub_name is None:
+            return None
+        return self.dict.attributes.get(sub_name)
+
+    def _is_tlv_extended_slot(self, parent_code: int, ext_type: int) -> bool:
+        """Return True when an Extended slot is declared as a ``tlv`` container."""
+
+        dictionary = getattr(self, "dict", None)
+        if dictionary is None:
+            return False
+        parent_attr = dictionary.attributes.get(self._decode_key(parent_code))
+        sub_attr = self._tlv_child_attr(parent_attr, ext_type)
+        return sub_attr is not None and sub_attr.type == "tlv"
 
     def _pkt_is_tlv_attribute(self, code):
         attr = self.dict.attributes.get(self._decode_key(code))
@@ -1458,8 +1616,11 @@ class Packet(OrderedDict):
 
         If the extended-type slot is registered as an ``evs`` marker, the
         payload is split into vendor-id + vendor-type + value and stored
-        under a flat 4-tuple key. Otherwise it stores under
-        ``self[parent][ext_type]`` as a regular extended sub-attribute.
+        under a flat 4-tuple key. If the slot is itself a ``tlv``
+        container (3+ level dictionaries), the payload is parsed as a
+        TLV chain and merged into ``self[parent][ext_type]`` as a
+        nested map. Plain leaf slots go to ``self[parent][ext_type]``
+        as raw bytes appended to a list.
         """
         if not value:
             return
@@ -1475,6 +1636,15 @@ class Packet(OrderedDict):
             return
 
         parent_dict = self.setdefault(parent_code, {})
+        if self._is_tlv_extended_slot(parent_code, ext_type):
+            nested = parent_dict.setdefault(ext_type, {})
+            if not isinstance(nested, dict):
+                nested = {}
+                parent_dict[ext_type] = nested
+            parent_attr = self.dict.attributes.get(self._decode_key(parent_code))
+            child_attr = self._tlv_child_attr(parent_attr, ext_type)
+            self._decode_tlv_chain_into(child_attr, nested, payload)
+            return
         parent_dict.setdefault(ext_type, []).append(payload)
 
     def _pkt_decode_long_extended_fragment(
@@ -1511,7 +1681,17 @@ class Packet(OrderedDict):
         buf.extend(payload)
         if not flags & LONG_EXTENDED_MORE_FLAG:
             parent_dict = self.setdefault(parent_code, {})
-            parent_dict.setdefault(ext_type, []).append(bytes(buf))
+            reassembled = bytes(buf)
+            if self._is_tlv_extended_slot(parent_code, ext_type):
+                nested = parent_dict.setdefault(ext_type, {})
+                if not isinstance(nested, dict):
+                    nested = {}
+                    parent_dict[ext_type] = nested
+                parent_attr = self.dict.attributes.get(self._decode_key(parent_code))
+                child_attr = self._tlv_child_attr(parent_attr, ext_type)
+                self._decode_tlv_chain_into(child_attr, nested, reassembled)
+            else:
+                parent_dict.setdefault(ext_type, []).append(reassembled)
             del self._long_ext_buf[(parent_code, ext_type)]
 
     def decode_packet(self, packet: bytes) -> None:

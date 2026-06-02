@@ -218,6 +218,28 @@ class Dictionary:
 
     has_key = __contains__
 
+    def _existing_container_chains(self) -> Dict[tuple, Any]:
+        """Build the parser's ``tlvs`` table from already-loaded attributes.
+
+        Reconstructs the full code chain for every previously-parsed
+        ``tlv`` / ``extended`` / ``long-extended`` attribute by walking
+        the ``parent`` links. Lets nested-TLV sub-attributes in one
+        dictionary file reference containers declared in another that
+        was loaded earlier in the same ``Dictionary`` instance.
+        """
+
+        chains: Dict[tuple, Any] = {}
+        for attr in self.attributes.values():
+            if attr.type not in ("tlv", "extended", "long-extended"):
+                continue
+            chain: list[int] = []
+            cur = attr
+            while cur is not None:
+                chain.append(cur.code)
+                cur = cur.parent
+            chains[tuple(reversed(chain))] = attr
+        return chains
+
     def __parse_attribute(self, state: dict, tokens: list):
         """Parse an ATTRIBUTE line from a dictionary file."""
         if len(tokens) not in [4, 5]:
@@ -286,15 +308,18 @@ class Dictionary:
                 tmp.append(int(c, 10))
         codes = tmp
 
+        if not codes:
+            raise ParseError(
+                "attribute code missing",
+                file=state["file"],
+                line=state["line"],
+            )
         is_sub_attribute = len(codes) > 1
-        if len(codes) == 2:
-            code = int(codes[1])
-            parent_code = int(codes[0])
-        elif len(codes) == 1:
-            code = int(codes[0])
-            parent_code = None
-        else:
-            raise ParseError("nested tlvs are not supported")
+        code = int(codes[-1])
+        # Full path from the root container down to (but not including)
+        # this attribute. Empty for top-level attributes; ``(241,)`` for
+        # a 2-level child; ``(241, 5)`` for a 3-level grandchild.
+        parent_chain: tuple[int, ...] = tuple(codes[:-1])
 
         datatype = datatype.split("[")[0]
 
@@ -318,12 +343,17 @@ class Dictionary:
             is_sub_attribute = True
         elif vendor:
             if is_sub_attribute:
-                key = (self.vendors.get_forward(vendor), parent_code, code)
+                # Vendor-namespaced sub-attribute: vendor id followed by
+                # the full code chain from the root container down.
+                key = (self.vendors.get_forward(vendor), *parent_chain, code)
             else:
                 key = (self.vendors.get_forward(vendor), code)
         else:
             if is_sub_attribute:
-                key = (parent_code, code)
+                # Plain (no-vendor) sub-attribute: the chain alone.
+                # ``(parent, code)`` for 2 levels, ``(241, 5, 1)`` for 3,
+                # etc.
+                key = (*parent_chain, code)
             else:
                 key = code
 
@@ -339,16 +369,25 @@ class Dictionary:
             concat=concat,
         )
         if datatype in ("tlv", "extended", "long-extended"):
-            # Save the container so subsequent dotted-code sub-attributes
-            # (e.g. ``ATTRIBUTE Frag-Status 241.1 integer``) can find their
-            # parent regardless of whether the wrapper is a TLV or an
-            # RFC 6929 extended attribute.
-            state["tlvs"][code] = self.attributes[attribute]
+            # Save the container under its full code chain so subsequent
+            # dotted-code sub-attributes (e.g. ``241.1`` under ``241``,
+            # or ``241.5.1`` under ``241.5``) can find their immediate
+            # parent regardless of nesting depth.
+            state["tlvs"][(*parent_chain, code)] = self.attributes[attribute]
         if state.get("evs_parent"):
             self.attributes[attribute].parent = self.attributes[state["evs_parent"]]
         elif is_sub_attribute:
-            state["tlvs"][parent_code].sub_attributes[code] = attribute
-            self.attributes[attribute].parent = state["tlvs"][parent_code]
+            try:
+                parent_attr = state["tlvs"][parent_chain]
+            except KeyError as exc:
+                raise ParseError(
+                    f"sub-attribute references undefined parent chain "
+                    f"{'.'.join(str(c) for c in parent_chain)}",
+                    file=state["file"],
+                    line=state["line"],
+                ) from exc
+            parent_attr.sub_attributes[code] = attribute
+            self.attributes[attribute].parent = parent_attr
 
     def __parse_value(self, state: dict, tokens: list, defer: bool) -> None:
         """Parse a VALUE line from a dictionary file."""
@@ -519,7 +558,13 @@ class Dictionary:
         state: Dict[str, Any] = {}
         state["vendor"] = ""
         state["evs_parent"] = None
-        state["tlvs"] = {}
+        # Carry container declarations across files: when a sub-attribute
+        # in this file refers to a container defined in a previously-
+        # loaded dictionary (e.g. dictionary.rfc7499 declaring 241.X under
+        # the Extended-Attribute-1 wrapper declared in dictionary.rfc6929),
+        # the parent has to be findable. Walk what we already know and
+        # seed the table keyed by full code chain.
+        state["tlvs"] = self._existing_container_chains()
         self.defer_parse = []
         for line in fil:
             state["file"] = fil.file()

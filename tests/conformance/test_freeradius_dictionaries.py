@@ -39,20 +39,20 @@ _CORPUS_DIR = Path(__file__).parent / "_corpus" / "dictionaries" / "share"
 # tests start protecting the new capability.
 _REASONS = {
     "wimax-continuation": (
-        "uses WiMAX 'format=1,1,c' continuation marker (RFC 5904 "
-        "long-packed VSAs) — pyrad2's VSA format parser only supports "
-        "the standard (type_len, len_len) pair"
+        "uses 'format=1,1,c' continuation marker (RFC 5904 long-packed "
+        "VSAs, originally for WiMAX) — pyrad2's VSA format parser only "
+        "supports the standard (type_len, len_len) pair"
     ),
-    "nested-tlv": (
-        "uses 3+ level nested TLV codes (e.g. '241.x.y' for RFC 6929 "
-        "extended attributes) — pyrad2's dictionary parser only "
-        "supports 2-level codes today"
+    "fr-extension-types": (
+        "uses FreeRADIUS-specific type aliases / attribute flags "
+        "(``uint16``, ``virtual``, ``array``, …) that aren't part of "
+        "the RFC 6929 / 7268 vocabulary pyrad2 implements"
     ),
     "needs-freeradius-base": (
         "depends on attributes / vendor IDs declared in "
         "dictionary.freeradius (or its internal companion), which is "
-        "itself blocked on nested-TLV support — unblocks transitively "
-        "once 'nested-tlv' is implemented"
+        "itself blocked on 'fr-extension-types' — unblocks transitively "
+        "once those FreeRADIUS-specific extensions are implemented"
     ),
     "fr-quirk-typo": (
         "FreeRADIUS dict uses a capitalised data type token like "
@@ -70,22 +70,19 @@ _INCOMPATIBLE_ON_RFC_BASE: dict[str, str] = {
     # Forward-reference bug in dictionary.aruba itself.
     "dictionary.aruba": "fr-dict-forward-ref",
     # FreeRADIUS internal / DHCP companions — all blocked behind
-    # dictionary.freeradius, which is itself nested-tlv blocked.
+    # dictionary.freeradius, which depends on FreeRADIUS-specific type
+    # aliases (uint16) and attribute flags (virtual, array) that are
+    # outside the RFC vocabulary pyrad2 implements.
     "dictionary.compat": "needs-freeradius-base",
-    "dictionary.dhcp": "needs-freeradius-base",
-    "dictionary.freedhcp": "needs-freeradius-base",
-    "dictionary.freeradius": "nested-tlv",
+    "dictionary.dhcp": "fr-extension-types",
+    "dictionary.freedhcp": "fr-extension-types",
+    "dictionary.freeradius": "fr-extension-types",
     "dictionary.freeradius.evs5": "needs-freeradius-base",
-    "dictionary.freeradius.internal": "needs-freeradius-base",
+    "dictionary.freeradius.internal": "fr-extension-types",
     # Capitalised "String" in the type column.
     "dictionary.juniper": "fr-quirk-typo",
-    # RFC 6929 extended attributes — 3+ level codes.
-    "dictionary.rfc7499": "nested-tlv",
-    "dictionary.rfc7930": "nested-tlv",
-    "dictionary.rfc8045": "nested-tlv",
-    "dictionary.rfc8559": "nested-tlv",
-    # WiMAX VSA continuation marker (RFC 5904).
-    "dictionary.telrad": "nested-tlv",
+    # RFC 5904 long-packed-VSA continuation marker (``format=1,1,c``).
+    "dictionary.telrad": "wimax-continuation",
     "dictionary.wimax": "wimax-continuation",
     "dictionary.wimax.alvarion": "wimax-continuation",
     "dictionary.wimax.wichorus": "wimax-continuation",
@@ -94,7 +91,7 @@ _INCOMPATIBLE_ON_RFC_BASE: dict[str, str] = {
 # Floor on how many vendor dictionaries must load on top of the RFC
 # base. Bump deliberately when pyrad2 grows a new capability; never
 # lower without a write-up.
-_MIN_LOADABLE_DICTIONARIES = 227
+_MIN_LOADABLE_DICTIONARIES = 231
 
 
 _DICTIONARY_NAME_RE = re.compile(r"^dictionary\.")

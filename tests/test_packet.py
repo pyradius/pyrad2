@@ -1012,6 +1012,98 @@ class TestExtendedAttribute:
             pkt._pkt_encode_attributes()
 
 
+class TestNestedExtendedTlv:
+    """RFC 6929 Extended-Type slot containing a nested TLV chain.
+
+    Mirrors the layout used by ``dictionary.rfc7499`` etc.: an
+    Extended-Attribute-1 wrapper whose ext-type 5 is declared as a
+    ``tlv`` container, with integer / ipaddr leaves nested under it.
+    """
+
+    def _make_dict(self):
+        return Dictionary(
+            StringIO(
+                "ATTRIBUTE Extended-Attribute-1 241 extended\n"
+                "ATTRIBUTE IP-Port-Limit-Info 241.5 tlv\n"
+                "ATTRIBUTE IP-Port-Type 241.5.1 integer\n"
+                "ATTRIBUTE IP-Port-Limit 241.5.2 integer\n"
+                "ATTRIBUTE IP-Port-Ext-IPv4-Addr 241.5.3 ipaddr\n"
+            )
+        )
+
+    def _make_packet(self, dictionary=None):
+        return packet.Packet(
+            id=0,
+            secret=b"secret",
+            authenticator=b"0123456789ABCDEF",
+            dict=dictionary or self._make_dict(),
+        )
+
+    def test_encode_single_nested_leaf(self):
+        pkt = self._make_packet()
+        pkt.add_attribute("IP-Port-Type", 7)
+        encoded = pkt._pkt_encode_attributes()
+        # Extended AVP: [241][total-len=9][ext_type=5] + inner TLV
+        # Inner: [code=1][len=6][4-byte int] = 6 bytes
+        # Total = 3 (Extended header) + 6 (inner) = 9 bytes.
+        assert encoded == b"\xf1\x09\x05\x01\x06\x00\x00\x00\x07"
+
+    def test_storage_shape_is_nested_dict(self):
+        pkt = self._make_packet()
+        pkt.add_attribute("IP-Port-Type", 7)
+        pkt.add_attribute("IP-Port-Limit", 100)
+        # self[241] = {5: {1: [...], 2: [...]}}
+        assert pkt[241] == {5: {1: [b"\x00\x00\x00\x07"], 2: [b"\x00\x00\x00\x64"]}}
+
+    def test_roundtrip_multiple_nested_leaves(self):
+        pkt = self._make_packet()
+        pkt.add_attribute("IP-Port-Type", 7)
+        pkt.add_attribute("IP-Port-Limit", 100)
+        pkt.add_attribute("IP-Port-Ext-IPv4-Addr", "192.0.2.1")
+        encoded = pkt._pkt_encode_attributes()
+
+        decoded = self._make_packet()
+        header = struct.pack("!BBH", 1, 1, 20 + len(encoded)) + b"0123456789ABCDEF"
+        decoded.decode_packet(header + encoded)
+
+        # Top-level Extended container resolves into a nested map of
+        # decoded sub-attribute values.
+        assert decoded["Extended-Attribute-1"] == {
+            "IP-Port-Limit-Info": {
+                "IP-Port-Type": [7],
+                "IP-Port-Limit": [100],
+                "IP-Port-Ext-IPv4-Addr": ["192.0.2.1"],
+            }
+        }
+
+    def test_decode_recognises_nested_tlv_slot(self):
+        # Hand-built wire bytes for IP-Port-Type=7 + IP-Port-Limit=100
+        # inside Extended-Attribute-1 ext_type=5. Inner chain is 12
+        # bytes; Extended length field = 3 + 12 = 15 (0x0f).
+        attrs = b"\xf1\x0f\x05\x01\x06\x00\x00\x00\x07\x02\x06\x00\x00\x00\x64"
+        header = struct.pack("!BBH", 1, 1, 20 + len(attrs)) + b"0123456789ABCDEF"
+
+        pkt = self._make_packet()
+        pkt.decode_packet(header + attrs)
+
+        assert pkt[241] == {5: {1: [b"\x00\x00\x00\x07"], 2: [b"\x00\x00\x00\x64"]}}
+
+    def test_encode_rejects_oversized_nested_chain(self):
+        d = Dictionary(
+            StringIO(
+                "ATTRIBUTE Extended-Attribute-1 241 extended\n"
+                "ATTRIBUTE Container 241.5 tlv\n"
+                "ATTRIBUTE Big-Blob 241.5.1 octets\n"
+            )
+        )
+        pkt = self._make_packet(d)
+        # 252-byte cap on Extended payload. Inner TLV header eats 2 bytes,
+        # so a 251-byte blob produces a 253-byte chain → reject.
+        pkt[241] = {5: {1: [b"A" * 251]}}
+        with pytest.raises(ValueError):
+            pkt._pkt_encode_attributes()
+
+
 class TestLongExtendedAttribute:
     """RFC 6929 long-extended attributes (245-246), with fragmentation."""
 
