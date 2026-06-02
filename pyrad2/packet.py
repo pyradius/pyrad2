@@ -21,17 +21,46 @@ def hmac_new(*args, **kwargs):
 
 
 # --- Wire trace ----------------------------------------------------------
-# Set PYRAD2_TRACE=1 (or true/yes/on) to dump every packet that crosses
-# request_packet / reply_packet / decode_packet. The dump is rendered as
-# a single multi-line ``loguru`` INFO message tagged ``[pyrad2 trace]``
-# so it interleaves cleanly with the rest of the application's logging.
+# Set ``PYRAD2_TRACE=1`` AND ``PYRAD2_TRACE_UNSAFE=1`` to dump every packet
+# that crosses ``request_packet`` / ``reply_packet`` / ``decode_packet``.
+# The dump is rendered as a single multi-line ``loguru`` INFO message
+# tagged ``[pyrad2 trace]`` so it interleaves cleanly with the rest of
+# the application's logging.
+#
+# The two-step gate exists because the trace dumps the Request
+# Authenticator and the *obfuscated* User-Password value verbatim. With
+# the shared secret known (commonly to anyone who can read the trace
+# log itself), the password's RFC 2865 obfuscation is fully reversible.
+# Treat any log that contains pyrad2 trace lines as carrying plaintext
+# credentials.
 
-_TRACE_ENABLED: bool = os.environ.get("PYRAD2_TRACE", "").lower() in (
-    "1",
-    "true",
-    "yes",
-    "on",
-)
+_TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").lower() in _TRUTHY_ENV_VALUES
+
+
+_TRACE_REQUESTED: bool = _env_flag("PYRAD2_TRACE")
+_TRACE_UNSAFE_ACK: bool = _env_flag("PYRAD2_TRACE_UNSAFE")
+_TRACE_ENABLED: bool = _TRACE_REQUESTED and _TRACE_UNSAFE_ACK
+
+if _TRACE_REQUESTED and not _TRACE_UNSAFE_ACK:
+    logger.warning(
+        "PYRAD2_TRACE=1 is set but PYRAD2_TRACE_UNSAFE=1 is not — "
+        "wire trace remains DISABLED. The trace dumps Request "
+        "Authenticator bytes and the obfuscated User-Password; combined "
+        "with the shared secret the plaintext is fully recoverable from "
+        "the log archive. Set PYRAD2_TRACE_UNSAFE=1 to acknowledge and "
+        "enable the trace."
+    )
+elif _TRACE_ENABLED:
+    logger.warning(
+        "PYRAD2_TRACE is ACTIVE. Wire traces include Request "
+        "Authenticator bytes and obfuscated User-Password values. Do "
+        "not enable in production unless the log destination is "
+        "access-controlled at the same level as the shared secret."
+    )
 
 
 def _trace_hexdump(data: bytes, indent: str = "        ", width: int = 16) -> str:
@@ -1804,18 +1833,24 @@ class AuthPacket(Packet):
         return raw
 
     def pw_decrypt(self, password: bytes) -> str:
-        """De-Obfuscate a RADIUS password. RADIUS hides passwords in packets by
-        using an algorithm based on the MD5 hash of the packet authenticator
-        and RADIUS secret. This function reverses the obfuscation process.
+        """De-Obfuscate a RADIUS password.
 
-        Although RFC2865 does not explicitly state UTF-8 for the password field,
-        the rest of RFC2865 defines UTF-8 as the encoding expected for the decrypted password.
+        RADIUS hides passwords using an algorithm based on the MD5 hash
+        of the packet authenticator and the RADIUS secret; this function
+        reverses the obfuscation. RFC 2865 mandates UTF-8 for the
+        decrypted plaintext.
+
+        When the secret on the receiving side doesn't match the secret
+        the client used, the de-obfuscation yields random bytes that
+        rarely form valid UTF-8. We catch that and emit a warning rather
+        than returning silent garbage; the call then falls back to a
+        lossy ``errors="ignore"`` decode so legacy handlers don't crash.
 
         Args:
-            password (str): obfuscated form of password
+            password (bytes): obfuscated form of password
 
         Returns:
-            str: Plaintext passsword
+            str: Plaintext password (lossy on secret mismatch).
         """
         if self.radius_version == RadiusVersion.V1_1:
             # RFC 9765 §5.1.1: User-Password is plain "string" over TLS.
@@ -1830,15 +1865,26 @@ class AuthPacket(Packet):
             # previous plaintext output (see the encrypt counterpart).
             last = block
 
-        # This is safe even with UTF-8 encoding since no valid encoding of UTF-8
-        # (other than encoding U+0000 NULL) will produce a bytestream containing 0x00 byte.
+        # This is safe even with UTF-8 encoding since no valid encoding of
+        # UTF-8 (other than encoding U+0000 NULL) will produce a
+        # bytestream containing 0x00 byte.
         pw = pw.rstrip(b"\x00")
 
-        # If the shared secret with the client is not the same, then de-obfuscating the password
-        # field may yield illegal UTF-8 bytes. Therefore, in order not to provoke an Exception here
-        # (which would be not consistently generated since this will depend on the random data
-        # chosen by the client) we simply ignore un-parsable UTF-8 sequences.
-        return pw.decode("utf-8", errors="ignore")
+        try:
+            return bytes(pw).decode("utf-8")
+        except UnicodeDecodeError:
+            # The non-UTF-8 result is almost always a shared-secret
+            # mismatch — the legitimate Latin-1 / shift-JIS password
+            # case is rare enough that the warning is worth the noise.
+            # Log once at WARNING so the operator can correlate it with
+            # an auth failure; fall back to a lossy decode to preserve
+            # the historic API.
+            logger.warning(
+                "AuthPacket.pw_decrypt produced non-UTF-8 bytes; this "
+                "almost always indicates a shared-secret mismatch between "
+                "the sender and this receiver. Returning a lossy decode."
+            )
+            return bytes(pw).decode("utf-8", errors="ignore")
 
     def pw_crypt(self, password: bytes) -> bytes:
         """Obfuscate password.

@@ -30,10 +30,19 @@ class MockPacket:
     has_key = __contains__
 
     def __setitem__(self, key, value):
-        self.data[key] = [value]
+        # Match ``Packet`` semantics: assigning a list keeps the list,
+        # assigning a scalar wraps it. The sync client's M6 restore path
+        # assigns the snapshot list verbatim.
+        if isinstance(value, list):
+            self.data[key] = value
+        else:
+            self.data[key] = [value]
 
     def __getitem__(self, key):
         return self.data[key]
+
+    def __delitem__(self, key):
+        del self.data[key]
 
 
 class MockSocket:

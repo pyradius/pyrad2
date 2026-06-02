@@ -150,54 +150,84 @@ class Client(host._ClientPacketFactoryMixin, host.Host):
         """
         self._socket_open()
 
-        for attempt in range(self.retries):
-            if attempt and pkt.code == PacketType.AccountingRequest:
-                if "Acct-Delay-Time" in pkt:
-                    pkt["Acct-Delay-Time"] = pkt["Acct-Delay-Time"][0] + self.timeout
-                else:
-                    pkt["Acct-Delay-Time"] = self.timeout
+        # ``Acct-Delay-Time`` is bumped per retry to reflect how long the
+        # request has been in flight. Snapshot the caller's original
+        # value (or note its absence) so the increment doesn't accumulate
+        # into the caller's packet across successive ``send_packet``
+        # invocations on the same object. ``getattr`` because some test
+        # paths pass ``pkt=None`` to exercise the no-retries timeout.
+        is_acct = getattr(pkt, "code", None) == PacketType.AccountingRequest
+        original_acct_delay: Optional[list] = None
+        had_acct_delay = False
+        if is_acct:
+            had_acct_delay = "Acct-Delay-Time" in pkt
+            if had_acct_delay:
+                # Preserve the full list (RADIUS attributes are sequences)
+                # so multi-valued or tagged Acct-Delay-Time round-trips
+                # exactly.
+                original_acct_delay = list(pkt["Acct-Delay-Time"])
 
-            now = time.time()
-            waitto = now + self.timeout
-
-            if not self._socket:
-                raise RuntimeError("No socket present")
-
-            self._prepare_outgoing_packet(pkt)
-            self._socket.sendto(pkt.request_packet(), (self.server, port))
-
-            while now < waitto:
-                rawreply = None
-
-                if os.name == "nt":
-                    for key, mask in self._sel.select(timeout=(waitto - now)):
-                        if mask & selectors.EVENT_READ:
-                            if isinstance(key.fileobj, socket.socket):
-                                rawreply = key.fileobj.recv(4096)
-
-                else:
-                    ready = self._poll.poll((waitto - now) * 1000)
-
-                    if ready:
-                        rawreply = self._socket.recv(4096)
-
-                if not rawreply:
-                    now = time.time()
-                    continue
-
-                try:
-                    reply = pkt.create_reply(packet=rawreply)
-                    if pkt.verify_reply(reply, rawreply, enforce_ma=self.enforce_ma):
-                        if hasattr(pkt, "authenticator"):
-                            reply.request_authenticator = pkt.authenticator
-
-                        return reply
-                except packet.PacketError:
-                    pass
+        try:
+            for attempt in range(self.retries):
+                if attempt and is_acct:
+                    if "Acct-Delay-Time" in pkt:
+                        pkt["Acct-Delay-Time"] = (
+                            pkt["Acct-Delay-Time"][0] + self.timeout
+                        )
+                    else:
+                        pkt["Acct-Delay-Time"] = self.timeout
 
                 now = time.time()
+                waitto = now + self.timeout
 
-        raise Timeout
+                if not self._socket:
+                    raise RuntimeError("No socket present")
+
+                self._prepare_outgoing_packet(pkt)
+                self._socket.sendto(pkt.request_packet(), (self.server, port))
+
+                while now < waitto:
+                    rawreply = None
+
+                    if os.name == "nt":
+                        for key, mask in self._sel.select(timeout=(waitto - now)):
+                            if mask & selectors.EVENT_READ:
+                                if isinstance(key.fileobj, socket.socket):
+                                    rawreply = key.fileobj.recv(4096)
+
+                    else:
+                        ready = self._poll.poll((waitto - now) * 1000)
+
+                        if ready:
+                            rawreply = self._socket.recv(4096)
+
+                    if not rawreply:
+                        now = time.time()
+                        continue
+
+                    try:
+                        reply = pkt.create_reply(packet=rawreply)
+                        if pkt.verify_reply(
+                            reply, rawreply, enforce_ma=self.enforce_ma
+                        ):
+                            if hasattr(pkt, "authenticator"):
+                                reply.request_authenticator = pkt.authenticator
+
+                            return reply
+                    except packet.PacketError:
+                        pass
+
+                    now = time.time()
+
+            raise Timeout
+        finally:
+            if is_acct:
+                if had_acct_delay:
+                    pkt["Acct-Delay-Time"] = original_acct_delay  # type: ignore[assignment]
+                elif "Acct-Delay-Time" in pkt:
+                    # We synthesised it during the retries — drop it so
+                    # the caller's packet returns to its original shape.
+                    del pkt["Acct-Delay-Time"]
 
     def send_packet(self, pkt: packet.PacketImplementation) -> packet.Packet:  # type: ignore
         """Send a packet to a RADIUS server.

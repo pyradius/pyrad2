@@ -147,23 +147,45 @@ class TestSocket:
             self.client._send_packet(packet, 432)
         assert "Acct-Delay-Time" not in packet
 
-    def test_single_account_delay(self):
+    def test_account_delay_not_persisted_to_caller_packet_after_retries(self):
+        # M6 contract: ``_send_packet`` snapshots ``Acct-Delay-Time``
+        # before its retry loop and restores it on exit (success OR
+        # timeout). The caller's packet must end in the same shape it
+        # started in — otherwise reusing the same ``AcctPacket`` across
+        # multiple ``send_packet`` calls would compound the delay.
         self.client.retries = 2
         self.client.timeout = 1
         self.client._socket = MockSocket(1, 2, b"valid reply")
         packet = MockPacket(PacketType.AccountingRequest)
         with pytest.raises(Timeout):
             self.client._send_packet(packet, 432)
-        assert packet["Acct-Delay-Time"] == [1]
+        # Started absent → restored to absent.
+        assert "Acct-Delay-Time" not in packet
 
-    def test_double_account_delay(self):
+    def test_account_delay_retries_do_not_compound_into_caller_packet(self):
+        # Same as above but with three retries to prove the count isn't
+        # what matters — the restore happens regardless of how many
+        # increments the loop performed.
         self.client.retries = 3
         self.client.timeout = 1
         self.client._socket = MockSocket(1, 2, b"valid reply")
         packet = MockPacket(PacketType.AccountingRequest)
         with pytest.raises(Timeout):
             self.client._send_packet(packet, 432)
-        assert packet["Acct-Delay-Time"] == [2]
+        assert "Acct-Delay-Time" not in packet
+
+    def test_caller_provided_account_delay_is_preserved(self):
+        # If the caller set their own ``Acct-Delay-Time`` (e.g. a fixed
+        # value they want sent) the snapshot/restore must hand it back
+        # untouched even though the retries internally bumped it.
+        self.client.retries = 3
+        self.client.timeout = 1
+        self.client._socket = MockSocket(1, 2, b"valid reply")
+        packet = MockPacket(PacketType.AccountingRequest)
+        packet["Acct-Delay-Time"] = 5
+        with pytest.raises(Timeout):
+            self.client._send_packet(packet, 432)
+        assert packet["Acct-Delay-Time"] == [5]
 
     def test_ignore_packet_error(self):
         self.client.retries = 1

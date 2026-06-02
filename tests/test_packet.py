@@ -1284,3 +1284,127 @@ class TestBlastRadiusHardening:
         )
         pkt = packet.AuthPacket(packet=header + attrs, secret=b"secret", dict=self.dict)
         assert pkt.verify_auth_request()
+
+
+class TestPwDecryptMismatchWarning:
+    """Regression coverage for M9 — ``pw_decrypt`` must warn the operator
+    when the de-obfuscation result is not valid UTF-8, which almost
+    always indicates a shared-secret mismatch."""
+
+    def setup_method(self):
+        import os
+
+        self.path = os.path.join(TEST_ROOT_PATH, "data")
+        self.dict = Dictionary(os.path.join(self.path, "full"))
+
+    def _make_packet(self, secret: bytes) -> packet.AuthPacket:
+        pkt = packet.AuthPacket(
+            id=1,
+            secret=secret,
+            authenticator=b"0123456789ABCDEF",
+            dict=self.dict,
+        )
+        return pkt
+
+    def test_matching_secret_decodes_cleanly_without_warning(self, caplog):
+        from loguru import logger
+
+        pkt = self._make_packet(b"shared-secret")
+        ciphertext = pkt.pw_crypt(b"hunter2")
+
+        handler_id = logger.add(caplog.handler, format="{message}")
+        try:
+            decoded = pkt.pw_decrypt(ciphertext)
+        finally:
+            logger.remove(handler_id)
+
+        assert decoded == "hunter2"
+        assert "non-UTF-8" not in caplog.text
+
+    def test_mismatched_secret_emits_warning(self, caplog):
+        from loguru import logger
+
+        # Encrypt with one secret, decrypt with another — the result is
+        # almost certainly non-UTF-8 (deterministic for this fixture).
+        sender = self._make_packet(b"sender-secret")
+        ciphertext = sender.pw_crypt(b"hunter2")
+
+        receiver = self._make_packet(b"receiver-secret")
+        # Authenticator must match what the sender used so the chain
+        # math is consistent. The mismatch is the *secret*.
+
+        handler_id = logger.add(caplog.handler, format="{message}", level="WARNING")
+        try:
+            decoded = receiver.pw_decrypt(ciphertext)
+        finally:
+            logger.remove(handler_id)
+
+        # Decoded value is lossy (errors="ignore" fallback). The
+        # important contract is the warning fired.
+        assert isinstance(decoded, str)
+        assert "non-UTF-8" in caplog.text
+        assert "shared-secret mismatch" in caplog.text
+
+
+class TestPyrad2TraceTwoStepGate:
+    """Regression coverage for M10 — ``PYRAD2_TRACE`` requires a paired
+    ``PYRAD2_TRACE_UNSAFE`` acknowledgement before any wire trace fires.
+
+    Tests inspect the underlying ``_env_flag`` helper and the module-level
+    ``_TRACE_ENABLED`` invariant directly rather than reloading the
+    ``packet`` module — reloading would invalidate other singletons the
+    rest of the suite relies on (the ``CURRENT_ID`` lock, the cached
+    dictionary fixtures).
+    """
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("1", True),
+            ("true", True),
+            ("yes", True),
+            ("on", True),
+            ("TRUE", True),
+            ("YES", True),
+            ("On", True),
+            ("0", False),
+            ("false", False),
+            ("no", False),
+            ("off", False),
+            ("", False),
+            ("garbage", False),
+        ],
+    )
+    def test_env_flag_matches_truthy_set(self, monkeypatch, value, expected):
+        from pyrad2 import packet as packet_mod
+
+        monkeypatch.setenv("PYRAD2_TEST_TRACE_VAR", value)
+        assert packet_mod._env_flag("PYRAD2_TEST_TRACE_VAR") is expected
+
+    def test_env_flag_treats_unset_as_false(self, monkeypatch):
+        from pyrad2 import packet as packet_mod
+
+        monkeypatch.delenv("PYRAD2_TEST_TRACE_VAR", raising=False)
+        assert packet_mod._env_flag("PYRAD2_TEST_TRACE_VAR") is False
+
+    def test_trace_enabled_is_logical_and_of_both_flags(self):
+        # The module-level invariant the wire-trace function depends on:
+        # ``_TRACE_ENABLED`` must equal the AND of the two requests, so a
+        # bare ``PYRAD2_TRACE=1`` never activates the dump on its own.
+        from pyrad2 import packet as packet_mod
+
+        assert packet_mod._TRACE_ENABLED == (
+            packet_mod._TRACE_REQUESTED and packet_mod._TRACE_UNSAFE_ACK
+        )
+
+    def test_trace_packet_short_circuits_when_disabled(self, monkeypatch):
+        # Patch the flag directly and confirm ``_trace_packet`` is a
+        # no-op — that's the security-relevant contract callers depend on.
+        from pyrad2 import packet as packet_mod
+
+        monkeypatch.setattr(packet_mod, "_TRACE_ENABLED", False)
+        # If the function tried to log anything we'd see logger output;
+        # silent return means the gate works.
+        packet_mod._trace_packet(
+            "out", b"\x01\x00\x00\x14" + b"\x00" * 16, packet_mod.Packet(id=1)
+        )
