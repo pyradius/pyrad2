@@ -94,5 +94,9 @@ DATATYPES = frozenset(
         # (e.g. ``dictionary.rfc6572``) load. Wire-level encode/decode
         # for it is a separate TODO.
         "ipv4prefix",
+        # ``combo-ip`` is FreeRADIUS's "either IPv4 or IPv6, decided at
+        # runtime by the on-wire length" type — 4 bytes for IPv4, 16 for
+        # IPv6. Wire-level encode/decode lives in ``tools.py``.
+        "combo-ip",
     ]
 )

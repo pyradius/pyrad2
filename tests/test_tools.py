@@ -90,6 +90,47 @@ class TestEncoding:
         ):
             tools.encode_octets("0x" + _LONG_HEX_254)
 
+    def test_combo_ip_encoding_picks_family_from_string(self):
+        # IPv4 → 4 bytes
+        assert tools.encode_combo_ip("192.0.2.1") == b"\xc0\x00\x02\x01"
+        # IPv6 → 16 bytes
+        assert tools.encode_combo_ip("2001:db8::1") == (
+            b"\x20\x01\x0d\xb8" + b"\x00" * 11 + b"\x01"
+        )
+
+    def test_combo_ip_encoding_accepts_typed_addresses(self):
+        from ipaddress import IPv4Address, IPv6Address
+
+        assert tools.encode_combo_ip(IPv4Address("10.0.0.1")) == b"\x0a\x00\x00\x01"
+        assert tools.encode_combo_ip(IPv6Address("::1")) == b"\x00" * 15 + b"\x01"
+
+    def test_combo_ip_encoding_rejects_garbage(self):
+        with pytest.raises(ValueError):
+            tools.encode_combo_ip("not-an-ip")
+        with pytest.raises(TypeError):
+            tools.encode_combo_ip(42)
+
+    def test_combo_ip_decoding_dispatches_on_length(self):
+        assert tools.decode_combo_ip(b"\xc0\x00\x02\x01") == "192.0.2.1"
+        assert (
+            tools.decode_combo_ip(b"\x20\x01\x0d\xb8" + b"\x00" * 11 + b"\x01")
+            == "2001:db8::1"
+        )
+
+    def test_combo_ip_decoding_rejects_wrong_length(self):
+        # Any length other than 4 or 16 is undefined for combo-ip.
+        with pytest.raises(ValueError):
+            tools.decode_combo_ip(b"\x00" * 8)
+        with pytest.raises(ValueError):
+            tools.decode_combo_ip(b"")
+
+    def test_combo_ip_roundtrips_via_encode_attr(self):
+        # Ensures the dispatch wiring in encode_attr / decode_attr is right.
+        raw = tools.encode_attr("combo-ip", "203.0.113.42")
+        assert tools.decode_attr("combo-ip", raw) == "203.0.113.42"
+        raw = tools.encode_attr("combo-ip", "2001:db8::42")
+        assert tools.decode_attr("combo-ip", raw) == "2001:db8::42"
+
     def test_ifid_encoding_roundtrip(self):
         text = "0011:2233:4455:6677"
         raw = tools.encode_ifid(text)

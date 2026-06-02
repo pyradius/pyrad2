@@ -36,9 +36,10 @@ _CORPUS_DIR = Path(__file__).parent / "_corpus" / "dictionaries" / "share"
 # the corresponding entries from ``_INCOMPATIBLE_STANDALONE`` so the
 # tests start protecting the new capability.
 _REASONS = {
-    "combo-ip": (
-        "uses FreeRADIUS 'combo-ip' data type (IPv4-or-IPv6 union) — "
-        "pyrad2 doesn't have a decoder for it yet"
+    "wimax-continuation": (
+        "uses WiMAX 'format=1,1,c' continuation marker (RFC 5904 "
+        "long-packed VSAs) — pyrad2's VSA format parser only supports "
+        "the standard (type_len, len_len) pair"
     ),
     "nested-tlv": (
         "uses 3+ level nested TLV codes (e.g. '241.x.y' for RFC 6929 "
@@ -58,7 +59,6 @@ _REASONS = {
 
 
 _INCOMPATIBLE_STANDALONE: dict[str, str] = {
-    "dictionary.alcatel-lucent.aaa": "combo-ip",
     "dictionary.aruba": "needs-parent",
     "dictionary.ascend": "needs-parent",
     "dictionary.bay": "needs-parent",
@@ -90,14 +90,14 @@ _INCOMPATIBLE_STANDALONE: dict[str, str] = {
     "dictionary.telrad": "nested-tlv",
     "dictionary.usr.illegal": "needs-parent",
     "dictionary.walabi": "needs-parent",
-    "dictionary.wimax": "combo-ip",
-    "dictionary.wimax.alvarion": "combo-ip",
-    "dictionary.wimax.wichorus": "combo-ip",
+    "dictionary.wimax": "wimax-continuation",
+    "dictionary.wimax.alvarion": "wimax-continuation",
+    "dictionary.wimax.wichorus": "wimax-continuation",
 }
 
 # Floor on how many vendor dictionaries must load. Bump deliberately
 # when pyrad2 grows a new capability; never lower without a write-up.
-_MIN_LOADABLE_DICTIONARIES = 208
+_MIN_LOADABLE_DICTIONARIES = 209
 
 
 _DICTIONARY_NAME_RE = re.compile(r"^dictionary\.")

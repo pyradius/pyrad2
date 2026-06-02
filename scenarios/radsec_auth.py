@@ -35,7 +35,7 @@ from _shared import (
     trace_hint,
 )
 from pyrad2.constants import PacketType
-from pyrad2.packet import AcctPacket, AuthPacket, CoAPacket
+from pyrad2.packet import AcctPacket, AuthPacket
 from pyrad2.radsec.client import RadSecClient
 from pyrad2.radsec.server import RadSecServer as BaseRadSecServer
 from pyrad2.server import RemoteHost
