@@ -43,7 +43,7 @@ dev = [
     "pytest-asyncio>=1.0.0",
     "pytest-cov>=7.1.0",
     "pytest-sugar>=1.1.1",
-    "ruff>=0.15.3",
+    "ruff>=0.15.15",
     "types-setuptools>=82.0.0.20260508",
 ]
 docs = [
