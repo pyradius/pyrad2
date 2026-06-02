@@ -44,7 +44,7 @@ dev = [
     "pytest-cov>=7.1.0",
     "pytest-sugar>=1.1.1",
     "ruff>=0.15.3",
-    "types-setuptools>=82.0.0.20260508",
+    "types-setuptools>=82.0.0.20260518",
 ]
 docs = [
     "mkdocs>=1.6.1",
