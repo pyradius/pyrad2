@@ -79,9 +79,7 @@ class TestResponseCache:
         assert self.cache.lookup(self.key) is None
 
     def test_lru_eviction(self):
-        keys = [
-            dedup.DedupKey("10.0.0.1", p, 1, p, bytes([p]) * 16) for p in range(5)
-        ]
+        keys = [dedup.DedupKey("10.0.0.1", p, 1, p, bytes([p]) * 16) for p in range(5)]
         for k in keys:
             self.cache.record_reply(k, b"r-%d" % k.src_port)
         # Cap is 3, so the two oldest were evicted.

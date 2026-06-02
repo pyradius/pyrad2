@@ -111,9 +111,7 @@ class DatagramProtocolClient(asyncio.Protocol):
 
     def send_packet(self, packet: PacketImplementation, future: asyncio.Future):
         if packet.id in self.pending_requests:
-            raise IdentifierExhausted(
-                "Packet with id %d already in flight" % packet.id
-            )
+            raise IdentifierExhausted("Packet with id %d already in flight" % packet.id)
 
         # Store packet on pending requests map
         self.pending_requests[packet.id] = {
@@ -436,9 +434,7 @@ class ClientAsync(_ClientPacketFactoryMixin):
             return self.protocol_acct
         raise ValueError("Status-Server port must be 'auth' or 'acct'")
 
-    def create_status_packet(
-        self, *, port: str = "auth", **args
-    ) -> StatusPacket:
+    def create_status_packet(self, *, port: str = "auth", **args) -> StatusPacket:
         """Create an RFC 5997 Status-Server health-check packet.
 
         Overrides the mixin to honour the ``port`` kwarg, since async

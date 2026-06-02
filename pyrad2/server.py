@@ -178,8 +178,11 @@ class Server(host.Host):
             adddr (str): IP address to lookup
         """
         results = set()
+        # ``port=None`` skips the service lookup entirely; ``SOCK_DGRAM``
+        # filters the results to UDP (RADIUS) so we don't iterate over
+        # duplicated TCP+UDP entries.
         try:
-            tmp = socket.getaddrinfo(addr, 80)
+            tmp = socket.getaddrinfo(addr, None, type=socket.SOCK_DGRAM)
         except socket.gaierror:
             return []
 
@@ -274,9 +277,7 @@ class Server(host.Host):
 
         action = self._router.dedup_consult(key, _resend)
         if action is dedup.DispatchAction.DROP:
-            logger.debug(
-                "Dropping duplicate in-flight request from {}", pkt.source
-            )
+            logger.debug("Dropping duplicate in-flight request from {}", pkt.source)
             return
         if action is dedup.DispatchAction.RESENT:
             logger.debug(
@@ -388,7 +389,10 @@ class Server(host.Host):
         secret = self._router.lookup_secret(source[0])
         pkt = self._router.parse(data, secret)
         pkt.source = source
-        pkt.fd = fd
+        # Stash the originating fd on the packet so ``send_reply_packet``
+        # and the dedup-cache resend path can route the reply back over
+        # the same socket without re-discovering it.
+        pkt.fd = fd  # type: ignore[attr-defined]
         return pkt
 
     def _prepare_sockets(self) -> None:

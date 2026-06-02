@@ -1,33 +1,84 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+# Lint, type-check, and test on every push/PR. Three jobs run in parallel:
+#
+#   lint       – ruff check + ruff format --check (single Python)
+#   typecheck  – mypy against pyrad2 (single Python)
+#   test       – pytest across the supported Python matrix, with coverage
+#                gated at the floor below.
+#
+# ``concurrency`` cancels in-flight runs on the same ref when a new push
+# lands so CI minutes aren't burned on superseded commits.
 
 name: Tests
 
 on:
   push:
-    branches: [ master, development ]
+    branches: [master, development]
   pull_request:
-    branches: [ master ]
+    branches: [master]
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Sync dev dependencies (locked)
+        run: uv sync --frozen
+      - name: ruff check
+        run: uv run ruff check pyrad2 tests
+      - name: ruff format --check
+        run: uv run ruff format --check pyrad2 tests
+
+  typecheck:
+    name: Type-check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Sync dev dependencies (locked)
+        run: uv sync --frozen
+      - name: mypy
+        run: uv run mypy pyrad2
+
   test:
+    name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: [ '3.12', '3.13', '3.14']
-
+        python-version: ['3.12', '3.13', '3.14']
     steps:
-    - uses: actions/checkout@v6
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install uv
-      uses: astral-sh/setup-uv@v5
-    - name: Install dependencies
-      run: |
-        uv sync
-    - name: Run unittest with coverage
-      run: |
-        uv run pytest tests/
-    
+      - uses: actions/checkout@v6
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Sync dev dependencies (locked)
+        run: uv sync --frozen
+      - name: Run pytest with coverage
+        # ``--cov-fail-under`` enforces the project-wide floor. Bump it as
+        # coverage genuinely improves; never lower it without justification.
+        run: |
+          uv run pytest tests/ \
+            --cov=pyrad2 \
+            --cov-report=term \
+            --cov-report=xml \
+            --cov-fail-under=80
+      - name: Upload coverage to Codecov
+        # ``continue-on-error`` so a transient Codecov hiccup doesn't fail
+        # the build; the coverage gate above is the hard floor.
+        if: matrix.python-version == '3.12'
+        continue-on-error: true
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false

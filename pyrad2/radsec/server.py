@@ -283,9 +283,7 @@ class RadSecServer:
             # radius_versions) MUST close when the client didn't pick a
             # version we support. The MAY-send-Protocol-Error path is
             # left out for now.
-            logger.warning(
-                "Closing RADSEC connection from {}: {}", peername, exc
-            )
+            logger.warning("Closing RADSEC connection from {}: {}", peername, exc)
             writer.close()
             await writer.wait_closed()
             return
@@ -373,7 +371,9 @@ class RadSecServer:
         """Add an RFC 5176 Error-Cause value without requiring dictionary support."""
         reply[ERROR_CAUSE_ATTRIBUTE] = [int(cause).to_bytes(4, "big")]
 
-    def _create_unsupported_coa_reply(self, packet: CoAPacket, code: PacketType) -> Packet:
+    def _create_unsupported_coa_reply(
+        self, packet: CoAPacket, code: PacketType
+    ) -> Packet:
         """Create a NAK response for unsupported Dynamic Authorization requests."""
         reply = packet.create_reply()
         reply.code = code

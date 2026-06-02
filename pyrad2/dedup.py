@@ -202,9 +202,7 @@ def consult_cache(
     return DispatchAction.PROCESS
 
 
-def record_if_keyed(
-    cache: Optional[ResponseCache], reply: Any, raw: bytes
-) -> None:
+def record_if_keyed(cache: Optional[ResponseCache], reply: Any, raw: bytes) -> None:
     """Cache ``raw`` if the reply carries a dedup key from its request."""
     key = getattr(reply, "_dedup_key", None)
     if key is not None and cache is not None:

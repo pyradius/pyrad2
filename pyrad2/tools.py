@@ -420,10 +420,7 @@ def normalize_cert_fingerprint(fingerprint: str) -> str:
     character hexadecimal SHA-256 fingerprint.
     """
     normalized = (
-        fingerprint.lower()
-        .removeprefix("sha256:")
-        .replace(":", "")
-        .replace(" ", "")
+        fingerprint.lower().removeprefix("sha256:").replace(":", "").replace(" ", "")
     )
     if len(normalized) != 64:
         raise ValueError("SHA-256 certificate fingerprints must be 64 hex characters")

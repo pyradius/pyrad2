@@ -129,6 +129,11 @@ class _ClientPacketFactoryMixin:
     factory method instead of the helper.
     """
 
+    # Declared for mypy so subclass attribute access type-checks. Subclasses
+    # set these in ``__init__``; the mixin treats them as read-only.
+    secret: bytes
+    dict: Optional[Dictionary]
+
     # Server-type labels passed through to ``_allocate_packet_id`` so a
     # subclass can pick the right id space when it manages a counter
     # per transport. Defined as class attributes so a subclass can
@@ -184,15 +189,11 @@ class _ClientPacketFactoryMixin:
 
     def create_acct_packet(self, **kwargs) -> "packet.AcctPacket":
         """Build an ``AcctPacket`` pre-populated with this client's context."""
-        return self._build_packet(
-            packet.AcctPacket, self._ACCT_SERVER_TYPE, **kwargs
-        )
+        return self._build_packet(packet.AcctPacket, self._ACCT_SERVER_TYPE, **kwargs)
 
     def create_coa_packet(self, **kwargs) -> "packet.CoAPacket":
         """Build a ``CoAPacket`` pre-populated with this client's context."""
-        return self._build_packet(
-            packet.CoAPacket, self._COA_SERVER_TYPE, **kwargs
-        )
+        return self._build_packet(packet.CoAPacket, self._COA_SERVER_TYPE, **kwargs)
 
     def create_status_packet(self, **kwargs) -> "packet.StatusPacket":
         """Build a Status-Server ``StatusPacket`` pre-populated with this

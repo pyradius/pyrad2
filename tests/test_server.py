@@ -225,9 +225,7 @@ class TestMessageAuthenticatorPolicy:
         self.remote_host = RemoteHost("host", b"secret", "host")
 
     def _server(self, **kwargs):
-        return Server(
-            hosts={"host": self.remote_host}, dict=self.dictionary, **kwargs
-        )
+        return Server(hosts={"host": self.remote_host}, dict=self.dictionary, **kwargs)
 
     def _parse_auth_packet(self, pkt):
         parsed = packet.AuthPacket(
@@ -239,9 +237,7 @@ class TestMessageAuthenticatorPolicy:
         return parsed
 
     def _parse_auth_packet_bytes(self, data):
-        parsed = packet.AuthPacket(
-            packet=data, secret=b"secret", dict=self.dictionary
-        )
+        parsed = packet.AuthPacket(packet=data, secret=b"secret", dict=self.dictionary)
         parsed.source = ("host", 12345)
         return parsed
 
@@ -278,9 +274,9 @@ class TestMessageAuthenticatorPolicy:
         # require_message_authenticator=False isolates the EAP-specific
         # policy gate (otherwise the general BlastRADIUS rule fires first).
         with pytest.raises(PacketError, match="EAP-Message requires"):
-            self._server(
-                require_message_authenticator=False
-            )._handle_auth_packet(self._parse_auth_packet(pkt))
+            self._server(require_message_authenticator=False)._handle_auth_packet(
+                self._parse_auth_packet(pkt)
+            )
 
     def test_valid_message_authenticator_is_accepted(self):
         server = self._server()
@@ -306,9 +302,9 @@ class TestMessageAuthenticatorPolicy:
         pkt = self._auth_packet()
 
         with pytest.raises(PacketError, match="attribute is required"):
-            self._server(
-                require_message_authenticator=True
-            )._handle_auth_packet(self._parse_auth_packet(pkt))
+            self._server(require_message_authenticator=True)._handle_auth_packet(
+                self._parse_auth_packet(pkt)
+            )
 
     def test_blastradius_default_rejects_plain_auth_request(self):
         # C2 regression: the constructor default now mitigates BlastRADIUS
@@ -421,9 +417,7 @@ class TestOther:
                 reply.kw = kw
                 return reply
 
-        reply = self.server.create_reply_packet(
-            TrivialPacket(), one="one", two="two"
-        )
+        reply = self.server.create_reply_packet(TrivialPacket(), one="one", two="two")
         assert isinstance(reply, _TrivialObject)
         assert reply.source is TrivialPacket.source
         assert reply.kw == dict(one="one", two="two")

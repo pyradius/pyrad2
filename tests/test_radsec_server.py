@@ -225,9 +225,7 @@ class AuthAcctOnlyRadSecServer(BaseRadSecServer):
 
 class TestServer:
     def setup_method(self):
-        self.dictionary = Dictionary(
-            os.path.join(TEST_ROOT_PATH, "dicts/dictionary")
-        )
+        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
 
         # require_message_authenticator=False / enforce_ma=False keep the
         # legacy test fixtures (which build plain Access-Requests without a
@@ -289,9 +287,7 @@ class TestServer:
         # as legacy; RFC 9750 mandates 1.3 for RADIUS/1.1. Both sides
         # must default to TLS 1.3 so a fresh install doesn't accept the
         # weaker handshake without an explicit opt-down.
-        assert (
-            BaseRadSecServer.DEFAULT_MINIMUM_TLS_VERSION == ssl.TLSVersion.TLSv1_3
-        )
+        assert BaseRadSecServer.DEFAULT_MINIMUM_TLS_VERSION == ssl.TLSVersion.TLSv1_3
         assert RadSecClient.DEFAULT_MINIMUM_TLS_VERSION == ssl.TLSVersion.TLSv1_3
 
     def test_legacy_tls_1_2_is_still_reachable_with_explicit_opt_out(self):
@@ -449,9 +445,7 @@ class TestServer:
         request[79] = [b"\x02\x01\x00\x05\x01"]
 
         with pytest.raises(PacketError, match="EAP-Message requires"):
-            await self.server.packet_received(
-                request.request_packet(), "127.0.0.1"
-            )
+            await self.server.packet_received(request.request_packet(), "127.0.0.1")
 
     async def test_message_authenticator_policy_accepts_valid_ma(self):
         request = self.client.create_auth_packet(
@@ -460,9 +454,7 @@ class TestServer:
         request[79] = [b"\x02\x01\x00\x05\x01"]
         request.add_message_authenticator()
 
-        reply = await self.server.packet_received(
-            request.request_packet(), "127.0.0.1"
-        )
+        reply = await self.server.packet_received(request.request_packet(), "127.0.0.1")
 
         assert reply.code == PacketType.AccessAccept
         assert reply.has_message_authenticator()
@@ -474,9 +466,7 @@ class TestServer:
         self.server.handle_access_request = fail_access_handler
         request = self.client.create_status_packet()
 
-        reply = await self.server.packet_received(
-            request.request_packet(), "127.0.0.1"
-        )
+        reply = await self.server.packet_received(request.request_packet(), "127.0.0.1")
 
         assert reply.code == PacketType.AccessAccept
         assert reply.has_message_authenticator()
@@ -509,9 +499,7 @@ class TestServer:
         request2 = self.client.create_auth_packet(
             code=PacketType.AccessRequest, User_Name="two"
         )
-        reader = FakeRadSecReader(
-            request1.request_packet(), request2.request_packet()
-        )
+        reader = FakeRadSecReader(request1.request_packet(), request2.request_packet())
         writer = FakeRadSecWriter(peername=("127.0.0.1", 44000))
 
         await server._handle_client(reader, writer)
@@ -534,9 +522,7 @@ class TestServer:
         request2 = self.client.create_auth_packet(
             code=PacketType.AccessRequest, User_Name="two"
         )
-        reader = FakeRadSecReader(
-            request1.request_packet(), request2.request_packet()
-        )
+        reader = FakeRadSecReader(request1.request_packet(), request2.request_packet())
         writer = FakeRadSecWriter(peername=("127.0.0.1", 44001))
 
         await server._handle_client(reader, writer)
@@ -599,9 +585,7 @@ class TestServer:
         self.server.enable_coa = False
         request = self.client.create_coa_packet(code=PacketType.CoARequest)
 
-        reply = await self.server.packet_received(
-            request.request_packet(), "127.0.0.1"
-        )
+        reply = await self.server.packet_received(request.request_packet(), "127.0.0.1")
 
         assert reply.code == PacketType.CoANAK
 
@@ -687,9 +671,7 @@ class TestRadSecClientConnection:
             if len(connections) == 1:
                 return (
                     FakeRadSecReader(
-                        exception=asyncio.IncompleteReadError(
-                            partial=b"", expected=4
-                        )
+                        exception=asyncio.IncompleteReadError(partial=b"", expected=4)
                     ),
                     writer,
                 )

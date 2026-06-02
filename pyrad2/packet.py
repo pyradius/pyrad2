@@ -55,9 +55,7 @@ def _trace_packet(direction: str, raw: bytes, pkt: "Packet") -> None:
     except ValueError:
         code_name = f"Code-{pkt.code}"
 
-    lines = [
-        f"[pyrad2 trace] {arrow} {code_name} id={pkt.id} len={len(raw)}"
-    ]
+    lines = [f"[pyrad2 trace] {arrow} {code_name} id={pkt.id} len={len(raw)}"]
     authenticator = getattr(pkt, "authenticator", None)
     if authenticator:
         lines.append(f"    authenticator: {authenticator.hex()}")
@@ -112,6 +110,7 @@ def _md5_keystream_xor(secret: bytes, prev: bytes, block: bytes) -> bytes:
         16, "big"
     )
 
+
 # Used for Typing to indicate you accept only the subclasses
 PacketImplementation = Union["AuthPacket", "AcctPacket", "CoAPacket", "StatusPacket"]
 ReplyPacketT = TypeVar("ReplyPacketT", bound="Packet")
@@ -145,9 +144,7 @@ def _pack_v11_header(
     """
     if zero_token:
         if token not in (None, b"\x00\x00\x00\x00"):
-            raise PacketError(
-                "zero_token=True requires token to be None or zero"
-            )
+            raise PacketError("zero_token=True requires token to be None or zero")
         token = b"\x00\x00\x00\x00"
     if token is None:
         raise PacketError(
@@ -156,9 +153,7 @@ def _pack_v11_header(
             "pass zero_token=True for a Protocol-Error reply."
         )
     if len(token) != 4:
-        raise PacketError(
-            f"RADIUS/1.1 Token must be exactly 4 bytes, got {len(token)}"
-        )
+        raise PacketError(f"RADIUS/1.1 Token must be exactly 4 bytes, got {len(token)}")
     return struct.pack("!BBH4s12s", code, 0, length, token, b"\x00" * 12)
 
 
@@ -179,7 +174,9 @@ def prepare_request_message_authenticator(
         or require_message_authenticator
         or has_eap_message()
     ):
-        ensure_message_authenticator = getattr(pkt, "ensure_message_authenticator", None)
+        ensure_message_authenticator = getattr(
+            pkt, "ensure_message_authenticator", None
+        )
         if ensure_message_authenticator is not None:
             ensure_message_authenticator()
 
@@ -211,14 +208,15 @@ def prepare_reply_message_authenticator(
     request_code = getattr(request, "code", None)
 
     require_for_access = (
-        require_message_authenticator
-        and request_code == PacketType.AccessRequest
+        require_message_authenticator and request_code == PacketType.AccessRequest
     )
 
     if (
         require_for_access
         or request_has_ma()
-        or (require_eap_message_authenticator and (request_has_eap() or reply_has_eap()))
+        or (
+            require_eap_message_authenticator and (request_has_eap() or reply_has_eap())
+        )
     ):
         if ensure_reply_ma is not None:
             ensure_reply_ma()
@@ -567,10 +565,7 @@ class Packet(OrderedDict):
         if not self.has_message_authenticator():
             if self.code == PacketType.StatusServer:
                 raise PacketError("Status-Server requires Message-Authenticator")
-            if (
-                require_message_authenticator
-                and self.code == PacketType.AccessRequest
-            ):
+            if require_message_authenticator and self.code == PacketType.AccessRequest:
                 raise PacketError("Message-Authenticator attribute is required")
             if require_eap_message_authenticator and self.has_eap_message():
                 raise PacketError("EAP-Message requires Message-Authenticator")
@@ -587,12 +582,12 @@ class Packet(OrderedDict):
 
     def _make_reply(
         self,
-        cls: type["Packet"],
+        cls: type[ReplyPacketT],
         code: Optional[int] = None,
         *,
         extra_kwargs: Optional[dict[str, Any]] = None,
         **attributes,
-    ) -> "Packet":
+    ) -> ReplyPacketT:
         """Build a reply of ``cls`` carrying this packet's id/secret/dict/auth.
 
         Subclasses use this to dedup the 8-line ``create_reply`` boilerplate.
@@ -713,9 +708,7 @@ class Packet(OrderedDict):
 
         (key, value) = self._encode_key_values(key, value)
 
-        if attr.is_sub_attribute and not (
-            attr.parent and attr.parent.type == "evs"
-        ):
+        if attr.is_sub_attribute and not (attr.parent and attr.parent.type == "evs"):
             # TLV-style nesting under the parent code. EVS-VSAs skip this:
             # their 4-tuple key already identifies the slot uniquely so they
             # live flat at the top level of the packet dict.
@@ -775,9 +768,7 @@ class Packet(OrderedDict):
         These nest under a parent code in ``self``'s storage; EVS
         sub-attributes use a 4-tuple flat key instead.
         """
-        return attr.is_sub_attribute and not (
-            attr.parent and attr.parent.type == "evs"
-        )
+        return attr.is_sub_attribute and not (attr.parent and attr.parent.type == "evs")
 
     def _encode_deferred_value_list(
         self, attr: Attribute, values: list, tag: str
@@ -879,9 +870,7 @@ class Packet(OrderedDict):
             encoded_values = self._encode_deferred_value_list(attr, values, tag)
             if self._is_tlv_sub_attribute(attr):
                 parent_key = self._encode_key(attr.parent.name)
-                pending[parent_key].setdefault(attr.code, []).extend(
-                    encoded_values
-                )
+                pending[parent_key].setdefault(attr.code, []).extend(encoded_values)
             else:
                 # EVS (4-tuple flat key), plain vendor (2-tuple), or
                 # standard top-level (int).
@@ -1293,9 +1282,7 @@ class Packet(OrderedDict):
             for index, chunk in enumerate(chunks):
                 more = LONG_EXTENDED_MORE_FLAG if index < len(chunks) - 1 else 0
                 result += (
-                    struct.pack(
-                        "!BBBB", parent_code, 9 + len(chunk), ext_type, more
-                    )
+                    struct.pack("!BBBB", parent_code, 9 + len(chunk), ext_type, more)
                     + evs_header
                     + chunk
                 )
@@ -1453,9 +1440,9 @@ class Packet(OrderedDict):
         if len(payload) >= 5 and self._is_evs_slot(parent_code, ext_type):
             (vendor_id,) = struct.unpack("!L", payload[:4])
             vsa_type = payload[4]
-            self.setdefault(
-                (parent_code, ext_type, vendor_id, vsa_type), []
-            ).append(payload[5:])
+            self.setdefault((parent_code, ext_type, vendor_id, vsa_type), []).append(
+                payload[5:]
+            )
             return
 
         parent_dict = self.setdefault(parent_code, {})
@@ -1668,6 +1655,7 @@ class Packet(OrderedDict):
             # No request Authenticator MD5 in v1.1 — TLS authenticates.
             return True
         assert self.raw_packet
+        assert self.authenticator is not None
         hash = hashlib.md5(
             self.raw_packet[0:4] + 16 * b"\x00" + self.raw_packet[20:] + self.secret
         ).digest()
@@ -1810,9 +1798,7 @@ class AuthPacket(Packet):
             header + attr + struct.pack("!BB16s", 80, struct.calcsize("!BB16s"), b""),
         ).digest()
         raw = (
-            header
-            + attr
-            + struct.pack("!BB16s", 80, struct.calcsize("!BB16s"), digest)
+            header + attr + struct.pack("!BB16s", 80, struct.calcsize("!BB16s"), digest)
         )
         _trace_packet("out", raw, self)
         return raw
@@ -1888,7 +1874,9 @@ class AuthPacket(Packet):
         last = self.authenticator
         for offset in range(0, len(buf), 16):
             block = _md5_keystream_xor(
-                self.secret, last, buf[offset : offset + 16]  # type: ignore[arg-type]
+                self.secret,
+                last,
+                buf[offset : offset + 16],  # type: ignore[arg-type]
             )
             out += block
             # Encrypt chains on the previous output ciphertext block.
@@ -2001,9 +1989,7 @@ class AcctPacket(Packet):
         makes sure the authenticator and secret are copied over
         to the new instance.
         """
-        return self._make_reply(
-            AcctPacket, PacketType.AccountingResponse, **attributes
-        )
+        return self._make_reply(AcctPacket, PacketType.AccountingResponse, **attributes)
 
     def verify_acct_request(self) -> bool:
         """Verify request authenticator.

@@ -135,9 +135,7 @@ class TestDictionaryParsing:
     def test_attribute_concat_option(self):
         # FreeRADIUS-style concat option keeps the attribute defined
         # instead of silently dropping it (the old behaviour).
-        self.dict.read_dictionary(
-            StringIO("ATTRIBUTE Long-Octets 30 octets concat")
-        )
+        self.dict.read_dictionary(StringIO("ATTRIBUTE Long-Octets 30 octets concat"))
         assert self.dict["Long-Octets"].concat is True
         assert self.dict["Long-Octets"].type == "octets"
         assert self.dict["Long-Octets"].code == 30
@@ -163,17 +161,14 @@ class TestDictionaryParsing:
 
     def test_value_for_unknown_attribute_error(self):
         with pytest.raises(ParseError, match="unknown attribute"):
-            self.dict.read_dictionary(
-                StringIO("VALUE Test-Attribute Test-Text 1")
-            )
+            self.dict.read_dictionary(StringIO("VALUE Test-Attribute Test-Text 1"))
 
     def test_integer_value_parsing(self):
         assert len(self.dict["Test-Integer"].values) == 0
         self.dict.read_dictionary(StringIO("VALUE Test-Integer Value-Six 5"))
         assert len(self.dict["Test-Integer"].values) == 1
         assert (
-            decode_attr("integer", self.dict["Test-Integer"].values["Value-Six"])
-            == 5
+            decode_attr("integer", self.dict["Test-Integer"].values["Value-Six"]) == 5
         )
 
     def test_integer64_value_parsing(self):
@@ -181,9 +176,7 @@ class TestDictionaryParsing:
         self.dict.read_dictionary(StringIO("VALUE Test-Integer64 Value-Six 5"))
         assert len(self.dict["Test-Integer64"].values) == 1
         assert (
-            decode_attr(
-                "integer64", self.dict["Test-Integer64"].values["Value-Six"]
-            )
+            decode_attr("integer64", self.dict["Test-Integer64"].values["Value-Six"])
             == 5
         )
 
@@ -194,9 +187,7 @@ class TestDictionaryParsing:
         )
         assert len(self.dict["Test-String"].values) == 1
         assert (
-            decode_attr(
-                "string", self.dict["Test-String"].values["Value-Custard"]
-            )
+            decode_attr("string", self.dict["Test-String"].values["Value-Custard"])
             == "custardpie"
         )
 
@@ -210,12 +201,8 @@ class TestDictionaryParsing:
             )
         )  # "B"
         assert len(self.dict["Test-Octets"].values) == 2
-        assert (
-            decode_attr("octets", self.dict["Test-Octets"].values["Value-A"]) == b"A"
-        )
-        assert (
-            decode_attr("octets", self.dict["Test-Octets"].values["Value-B"]) == b"B"
-        )
+        assert decode_attr("octets", self.dict["Test-Octets"].values["Value-A"]) == b"A"
+        assert decode_attr("octets", self.dict["Test-Octets"].values["Value-B"]) == b"B"
 
     def test_tlv_parsing(self):
         assert len(self.dict["Test-Tlv"].sub_attributes) == 2
@@ -246,9 +233,7 @@ class TestDictionaryParsing:
 
     def test_vendor_parsing(self):
         with pytest.raises(ParseError):
-            self.dict.read_dictionary(
-                StringIO("ATTRIBUTE Test-Type 1 integer Simplon")
-            )
+            self.dict.read_dictionary(StringIO("ATTRIBUTE Test-Type 1 integer Simplon"))
         self.dict.read_dictionary(StringIO("VENDOR Simplon 42"))
         assert self.dict.vendors["Simplon"] == 42
         self.dict.read_dictionary(StringIO("ATTRIBUTE Test-Type 1 integer Simplon"))
@@ -256,25 +241,19 @@ class TestDictionaryParsing:
 
     def test_vendor_option_error(self):
         with pytest.raises(ParseError):
-            self.dict.read_dictionary(
-                StringIO("ATTRIBUTE Test-Type 1 integer Simplon")
-            )
+            self.dict.read_dictionary(StringIO("ATTRIBUTE Test-Type 1 integer Simplon"))
         with pytest.raises(ParseError, match="option"):
             self.dict.read_dictionary(StringIO("VENDOR Simplon 42 badoption"))
 
     def test_vendor_format_error(self):
         with pytest.raises(ParseError):
-            self.dict.read_dictionary(
-                StringIO("ATTRIBUTE Test-Type 1 integer Simplon")
-            )
+            self.dict.read_dictionary(StringIO("ATTRIBUTE Test-Type 1 integer Simplon"))
         with pytest.raises(ParseError, match="format"):
             self.dict.read_dictionary(StringIO("VENDOR Simplon 42 format=5,4"))
 
     def test_vendor_format_syntax_error(self):
         with pytest.raises(ParseError):
-            self.dict.read_dictionary(
-                StringIO("ATTRIBUTE Test-Type 1 integer Simplon")
-            )
+            self.dict.read_dictionary(StringIO("ATTRIBUTE Test-Type 1 integer Simplon"))
         with pytest.raises(ParseError, match="Syntax"):
             self.dict.read_dictionary(StringIO("VENDOR Simplon 42 format=a,1"))
 
@@ -372,9 +351,7 @@ class TestDictionaryParsing:
     def test_begin_vendor_parsing(self):
         self.dict.read_dictionary(
             StringIO(
-                "VENDOR Simplon 42\n"
-                "BEGIN-VENDOR Simplon\n"
-                "ATTRIBUTE Test-Type 1 integer"
+                "VENDOR Simplon 42\nBEGIN-VENDOR Simplon\nATTRIBUTE Test-Type 1 integer"
             )
         )
         assert self.dict.attrindex["Test-Type"] == (42, 1)
@@ -386,9 +363,7 @@ class TestDictionaryParsing:
     def test_end_vendor_unbalanced(self):
         with pytest.raises(ParseError, match="Oops"):
             self.dict.read_dictionary(
-                StringIO(
-                    "VENDOR Simplon 42\nBEGIN-VENDOR Simplon\nEND-VENDOR Oops\n"
-                )
+                StringIO("VENDOR Simplon 42\nBEGIN-VENDOR Simplon\nEND-VENDOR Oops\n")
             )
 
     def test_end_vendor_parsing(self):

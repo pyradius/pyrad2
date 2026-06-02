@@ -64,18 +64,21 @@ class TestVersionFromAlpn:
 
 class TestNegotiate:
     def test_peer_picked_supported_version(self):
-        assert negotiate(
-            (RadiusVersion.V1_0, RadiusVersion.V1_1), ALPN_V1_1
-        ) is RadiusVersion.V1_1
-        assert negotiate(
-            (RadiusVersion.V1_0, RadiusVersion.V1_1), ALPN_V1_0
-        ) is RadiusVersion.V1_0
+        assert (
+            negotiate((RadiusVersion.V1_0, RadiusVersion.V1_1), ALPN_V1_1)
+            is RadiusVersion.V1_1
+        )
+        assert (
+            negotiate((RadiusVersion.V1_0, RadiusVersion.V1_1), ALPN_V1_0)
+            is RadiusVersion.V1_0
+        )
 
     def test_peer_no_alpn_with_v1_0_in_config_falls_back(self):
         assert negotiate((RadiusVersion.V1_0,), None) is RadiusVersion.V1_0
-        assert negotiate(
-            (RadiusVersion.V1_0, RadiusVersion.V1_1), None
-        ) is RadiusVersion.V1_0
+        assert (
+            negotiate((RadiusVersion.V1_0, RadiusVersion.V1_1), None)
+            is RadiusVersion.V1_0
+        )
 
     def test_peer_no_alpn_strict_v1_1_raises(self):
         """RFC 9765 §3.3: strict v1.1 must close, not downgrade."""
@@ -89,20 +92,25 @@ class TestNegotiate:
 
 class TestEnforceTlsVersionFloor:
     def test_v1_0_only_does_not_change_minimum(self):
-        assert enforce_tls_version_floor(
-            ssl.TLSVersion.TLSv1_2, (RadiusVersion.V1_0,)
-        ) is ssl.TLSVersion.TLSv1_2
+        assert (
+            enforce_tls_version_floor(ssl.TLSVersion.TLSv1_2, (RadiusVersion.V1_0,))
+            is ssl.TLSVersion.TLSv1_2
+        )
 
     def test_v1_1_promotes_to_1_3(self):
-        assert enforce_tls_version_floor(
-            ssl.TLSVersion.TLSv1_2,
-            (RadiusVersion.V1_0, RadiusVersion.V1_1),
-        ) is ssl.TLSVersion.TLSv1_3
+        assert (
+            enforce_tls_version_floor(
+                ssl.TLSVersion.TLSv1_2,
+                (RadiusVersion.V1_0, RadiusVersion.V1_1),
+            )
+            is ssl.TLSVersion.TLSv1_3
+        )
 
     def test_v1_1_keeps_caller_floor_if_already_high(self):
-        assert enforce_tls_version_floor(
-            ssl.TLSVersion.TLSv1_3, (RadiusVersion.V1_1,)
-        ) is ssl.TLSVersion.TLSv1_3
+        assert (
+            enforce_tls_version_floor(ssl.TLSVersion.TLSv1_3, (RadiusVersion.V1_1,))
+            is ssl.TLSVersion.TLSv1_3
+        )
 
 
 class TestApplyAlpn:
@@ -282,9 +290,7 @@ class TestPacketGating:
         assert 80 not in parsed
         assert not parsed.has_message_authenticator()
 
-    def test_set_obfuscated_user_password_v1_1_emits_plaintext(
-        self, radsec_dictionary
-    ):
+    def test_set_obfuscated_user_password_v1_1_emits_plaintext(self, radsec_dictionary):
         # Use the integration test dictionary which carries User-Password.
         radsec_dict = radsec_dictionary
         token = TokenCounter().next()
@@ -369,7 +375,9 @@ class TestPacketGating:
         _ = pkt.request_packet()
         # Stored attribute keys unchanged; deferred sidecar unchanged.
         assert list(pkt.keys()) == before_keys
-        assert {k: list(v) for k, v in pkt._deferred_obfuscated.items()} == before_deferred
+        assert {
+            k: list(v) for k, v in pkt._deferred_obfuscated.items()
+        } == before_deferred
 
         # And a second serialization is byte-stable.
         first = pkt.request_packet()
@@ -437,17 +445,20 @@ class TestPacketGating:
     def test_pack_v11_header_requires_token(self):
         from pyrad2.packet import _pack_v11_header
         from pyrad2.exceptions import PacketError as PErr
+
         with pytest.raises(PErr):
             _pack_v11_header(1, 20, None)
 
     def test_pack_v11_header_rejects_wrong_size_token(self):
         from pyrad2.packet import _pack_v11_header
         from pyrad2.exceptions import PacketError as PErr
+
         with pytest.raises(PErr):
             _pack_v11_header(1, 20, b"too-long-token")
 
     def test_pack_v11_header_zero_token_escape_hatch(self):
         from pyrad2.packet import _pack_v11_header
+
         raw = _pack_v11_header(1, 20, None, zero_token=True)
         assert raw[4:8] == b"\x00\x00\x00\x00"
         assert raw[8:20] == b"\x00" * 12
@@ -457,6 +468,7 @@ class TestPacketGating:
         time rather than silently emit a zero Token that looks like a
         Protocol-Error reply."""
         from pyrad2.exceptions import PacketError as PErr
+
         pkt = AuthPacket(
             id=0,
             secret=b"radsec",
@@ -483,6 +495,7 @@ class TestPacketGating:
         # Now stuff random bytes into authenticator on the v1.1 packet and
         # confirm they don't leak.
         import os as _os
+
         pkt.authenticator = _os.urandom(16)
         raw = pkt.request_packet()
         assert raw[4:8] == pkt.token
@@ -733,6 +746,7 @@ class TestStampRadiusVersion:
         pkt = self._make_packet()
         # Simulate a prior round where v1.1 was negotiated.
         from pyrad2.radsec.v11 import TokenCounter
+
         pkt.radius_version = RadiusVersion.V1_1
         pkt.token = TokenCounter().next()
         # Now negotiate v1.0 and re-stamp.
@@ -746,6 +760,7 @@ class TestStampRadiusVersion:
         pkt = self._make_packet()
         self.client._negotiated_version = RadiusVersion.V1_1
         from pyrad2.radsec.v11 import TokenCounter
+
         self.client._token_counter = TokenCounter()
         self.client._stamp_radius_version(pkt)
         assert pkt.radius_version is RadiusVersion.V1_1
@@ -761,6 +776,7 @@ class TestStampRadiusVersion:
         pkt.token = original_token
         self.client._negotiated_version = RadiusVersion.V1_1
         from pyrad2.radsec.v11 import TokenCounter
+
         self.client._token_counter = TokenCounter()
         self.client._stamp_radius_version(pkt)
         assert pkt.token == original_token
@@ -810,6 +826,7 @@ class TestV11StatusServerVerifier:
 
     def test_radsec_server_v1_1_status_passes_verify_packet(self):
         from pyrad2.radsec.server import RadSecServer
+
         server = RadSecServer(
             certfile=SERVER_CERTFILE,
             keyfile=SERVER_KEYFILE,
@@ -841,6 +858,7 @@ class TestV11Chap:
 
     def test_v1_1_chap_without_challenge_raises(self):
         from pyrad2.exceptions import PacketError as PErr
+
         pkt = packet.AuthPacket(
             id=0,
             secret=b"radsec",

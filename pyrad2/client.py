@@ -86,9 +86,15 @@ class Client(host._ClientPacketFactoryMixin, host.Host):
             raise RuntimeError("No socket present")
 
     def _socket_open(self) -> None:
+        # Only the address family matters here; pass ``port=None`` so we
+        # don't bother resolving any service entry, and ``type=SOCK_DGRAM``
+        # so the result is filtered to UDP (RADIUS). The broad except
+        # preserves the legacy "fall back to IPv4 on anything weird"
+        # behaviour — including when callers pass a non-string sentinel
+        # in tests; the eventual bind/sendto will surface a real error.
         try:
-            family = socket.getaddrinfo(self.server, 80)[0][0]
-        except Exception:
+            family = socket.getaddrinfo(self.server, None, type=socket.SOCK_DGRAM)[0][0]
+        except Exception:  # noqa: BLE001 — see comment above
             family = socket.AF_INET
         if not self._socket:
             self._socket = socket.socket(family, socket.SOCK_DGRAM)

@@ -274,9 +274,7 @@ class TestEapMd5Async:
     """EAP-MD5 challenge/response feature parity with the sync client."""
 
     def setup_method(self):
-        self.dictionary = Dictionary(
-            os.path.join(TEST_ROOT_PATH, "dicts/dictionary")
-        )
+        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
 
     def _make_client(self) -> ClientAsync:
         client = ClientAsync(
@@ -448,9 +446,7 @@ class TestSendPacketRouting:
     """
 
     def setup_method(self):
-        self.dictionary = Dictionary(
-            os.path.join(TEST_ROOT_PATH, "dicts/dictionary")
-        )
+        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
 
     def _make_client(self) -> ClientAsync:
         client = ClientAsync(

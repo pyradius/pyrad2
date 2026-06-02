@@ -299,7 +299,9 @@ class ServerAsync(ABC):
         protocol: "DatagramProtocolServer",
         req: Packet,
         addr: tuple[str | Any, int],
-        handler: Callable[["DatagramProtocolServer", Packet, tuple[str | Any, int]], None],
+        handler: Callable[
+            ["DatagramProtocolServer", Packet, tuple[str | Any, int]], None
+        ],
     ) -> None:
         """Wrap ``handler(protocol, req, addr)`` with RFC 5080 dedup."""
         key = self._router.dedup_key_for(req, source=addr)

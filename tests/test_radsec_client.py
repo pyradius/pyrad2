@@ -83,9 +83,7 @@ class TestEapMd5OverRadSec:
     """EAP-MD5 must round-trip transparently over a RadSec connection."""
 
     def setup_method(self):
-        self.dictionary = Dictionary(
-            os.path.join(TEST_ROOT_PATH, "dicts/dictionary")
-        )
+        self.dictionary = Dictionary(os.path.join(TEST_ROOT_PATH, "dicts/dictionary"))
         self.client = _make_client()
         self.client.dict = self.dictionary
 
@@ -184,9 +182,7 @@ class TestEnsureConnection:
         async def open_connection():
             return fresh_reader, fresh_writer
 
-        with patch.object(
-            self.client, "_open_connection", side_effect=open_connection
-        ):
+        with patch.object(self.client, "_open_connection", side_effect=open_connection):
             reader, writer = await self.client._ensure_connection()
 
         assert reader is fresh_reader
@@ -201,9 +197,7 @@ class TestEnsureConnection:
         async def open_connection():
             raise AssertionError("should not reopen when writer is healthy")
 
-        with patch.object(
-            self.client, "_open_connection", side_effect=open_connection
-        ):
+        with patch.object(self.client, "_open_connection", side_effect=open_connection):
             reader, writer = await self.client._ensure_connection()
 
         assert reader is healthy_reader
@@ -278,9 +272,7 @@ class TestReconnectBackoff:
             raise asyncio.IncompleteReadError(partial=b"", expected=4)
 
         with (
-            patch.object(
-                self.client, "_send_packet_once", side_effect=always_fail
-            ),
+            patch.object(self.client, "_send_packet_once", side_effect=always_fail),
             patch("pyrad2.radsec.client.asyncio.sleep", record_sleep),
         ):
             reply = await self.client._send_packet(object())
@@ -304,9 +296,7 @@ class TestReconnectBackoff:
             raise asyncio.IncompleteReadError(partial=b"", expected=4)
 
         with (
-            patch.object(
-                self.client, "_send_packet_once", side_effect=always_fail
-            ),
+            patch.object(self.client, "_send_packet_once", side_effect=always_fail),
             patch("pyrad2.radsec.client.asyncio.sleep", record_sleep),
         ):
             await self.client._send_packet(object())

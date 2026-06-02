@@ -202,8 +202,7 @@ class RequestRouter:
         if not isinstance(reply, Packet):
             return
         force_ma_for_access = (
-            self.require_message_authenticator
-            and reply.code in _ACCESS_REPLY_CODES
+            self.require_message_authenticator and reply.code in _ACCESS_REPLY_CODES
         )
         if force_ma_for_access or (
             self.require_eap_message_authenticator and reply.has_eap_message()

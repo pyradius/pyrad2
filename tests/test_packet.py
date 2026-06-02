@@ -174,7 +174,7 @@ class TestPacket:
         self.packet["Test-String"] = "dummy"
         assert self.packet.has_key("Test-String")
         assert self.packet.has_key(1)
-        assert (1 in self.packet)
+        assert 1 in self.packet
 
     def testHasKeyWithUnknownKey(self):
         assert not self.packet.has_key("Unknown-Attribute")
@@ -251,7 +251,9 @@ class TestPacket:
         rawreply = reply.reply_packet()
         parsed_reply = request.create_reply(packet=rawreply)
 
-        assert not request.verify_reply(parsed_reply, rawreply=rawreply, enforce_ma=True)
+        assert not request.verify_reply(
+            parsed_reply, rawreply=rawreply, enforce_ma=True
+        )
 
     def test_verify_reply_enforce_ma_validates_reply_message_authenticator(self):
         request = packet.AuthPacket(
@@ -366,7 +368,8 @@ class TestPacket:
         # Encode a long tlv attribute - check it is split between AVPs
         assert (
             encode(4, {1: [b"value", long_str], 2: [b"\x00\x00\x00\x02"]})
-            == b"\x04\x0f\x01\x07value\x02\x06\x00\x00\x00\x02\x04\xf9\x01\xf7" + long_str
+            == b"\x04\x0f\x01\x07value\x02\x06\x00\x00\x00\x02\x04\xf9\x01\xf7"
+            + long_str
         )
 
         # Encode a long vendor tlv attribute
@@ -589,10 +592,7 @@ class TestStatusPacket:
         assert isinstance(parsed, packet.StatusPacket)
 
     def test_validate_policy_requires_message_authenticator(self):
-        rawpacket = (
-            b"\x0c\x01\x00\x14"
-            b"0123456789ABCDEF"
-        )
+        rawpacket = b"\x0c\x01\x00\x140123456789ABCDEF"
         parsed = packet.StatusPacket(packet=rawpacket, secret=b"secret", dict=self.dict)
 
         with pytest.raises(packet.PacketError, match="Status-Server requires"):
@@ -940,12 +940,7 @@ class TestConcatAttribute:
         pkt = packet.Packet(
             id=1, secret=b"secret", authenticator=b"0123456789ABCDEF", dict=d
         )
-        attrs = (
-            struct.pack("!BB", 31, 5)
-            + b"AAA"
-            + struct.pack("!BB", 31, 5)
-            + b"BBB"
-        )
+        attrs = struct.pack("!BB", 31, 5) + b"AAA" + struct.pack("!BB", 31, 5) + b"BBB"
         header = struct.pack("!BBH", 1, 1, 20 + len(attrs)) + b"0123456789ABCDEF"
         pkt.decode_packet(header + attrs)
         # Two entries remain — concat must not affect plain string attributes.
@@ -1066,12 +1061,8 @@ class TestLongExtendedAttribute:
         pkt = self._make_packet()
         # Manually build a 500-byte split payload like the encoder produces.
         payload = b"A" * 500
-        first = (
-            struct.pack("!BBBB", 245, 4 + 251, 1, 0x80) + payload[:251]
-        )
-        second = (
-            struct.pack("!BBBB", 245, 4 + 249, 1, 0x00) + payload[251:]
-        )
+        first = struct.pack("!BBBB", 245, 4 + 251, 1, 0x80) + payload[:251]
+        second = struct.pack("!BBBB", 245, 4 + 249, 1, 0x00) + payload[251:]
         attrs = first + second
         header = struct.pack("!BBH", 1, 1, 20 + len(attrs)) + b"0123456789ABCDEF"
         pkt.decode_packet(header + attrs)
@@ -1283,9 +1274,7 @@ class TestBlastRadiusHardening:
         an all-zero value lets an attacker recover salt-encrypted attrs)."""
         attrs = b""
         header = struct.pack("!BBH16s", PacketType.AccessRequest, 1, 20, b"\x00" * 16)
-        pkt = packet.AuthPacket(
-            packet=header + attrs, secret=b"secret", dict=self.dict
-        )
+        pkt = packet.AuthPacket(packet=header + attrs, secret=b"secret", dict=self.dict)
         assert not pkt.verify_auth_request()
 
     def test_verify_auth_request_accepts_random_authenticator(self):
@@ -1293,7 +1282,5 @@ class TestBlastRadiusHardening:
         header = struct.pack(
             "!BBH16s", PacketType.AccessRequest, 1, 20, b"0123456789ABCDEF"
         )
-        pkt = packet.AuthPacket(
-            packet=header + attrs, secret=b"secret", dict=self.dict
-        )
+        pkt = packet.AuthPacket(packet=header + attrs, secret=b"secret", dict=self.dict)
         assert pkt.verify_auth_request()

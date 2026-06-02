@@ -234,9 +234,7 @@ class RadSecClient(_ClientPacketFactoryMixin):
                 "No common RADIUS protocol version with RadSec server: " + str(exc)
             ) from exc
         self._token_counter = (
-            TokenCounter()
-            if self._negotiated_version == RadiusVersion.V1_1
-            else None
+            TokenCounter() if self._negotiated_version == RadiusVersion.V1_1 else None
         )
 
         logger.info(

@@ -1,0 +1,37 @@
+version: 2
+updates:
+  # Python runtime + dev + docs dependencies declared in pyproject.toml /
+  # uv.lock. Dependabot batches minor/patch bumps into a weekly PR so
+  # the firehose stays manageable.
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      python-deps:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+      - python
+
+  # GitHub Actions versions pinned in .github/workflows/. Bumps go in a
+  # weekly batch alongside Python deps.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns:
+          - "*"
+    labels:
+      - dependencies
+      - github-actions

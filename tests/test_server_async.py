@@ -59,9 +59,7 @@ class TestDatagramProtocolServer:
         mock_packet = MagicMock()
         mock_packet.reply_packet.return_value = b"response"
         self.protocol.send_response(mock_packet, ("127.0.0.1", 12345))
-        self.transport.sendto.assert_called_once_with(
-            b"response", ("127.0.0.1", 12345)
-        )
+        self.transport.sendto.assert_called_once_with(b"response", ("127.0.0.1", 12345))
 
     def test_auth_status_server_replies_without_callback(self, full_dictionary):
         self.server.dict = full_dictionary
@@ -74,9 +72,7 @@ class TestDatagramProtocolServer:
         self.protocol.connection_made(self.transport)
         self.protocol.request_callback = MagicMock()
 
-        self.protocol.datagram_received(
-            request.request_packet(), ("127.0.0.1", 12345)
-        )
+        self.protocol.datagram_received(request.request_packet(), ("127.0.0.1", 12345))
 
         self.protocol.request_callback.assert_not_called()
         rawreply = self.transport.sendto.call_args.args[0]
@@ -148,15 +144,11 @@ class TestServerAsync:
         with pytest.raises(ValueError, match="Missing packet to reply to"):
             server.create_reply_packet()
 
-    def test_message_authenticator_policy_rejects_eap_without_ma(
-        self, full_dictionary
-    ):
+    def test_message_authenticator_policy_rejects_eap_without_ma(self, full_dictionary):
         dictionary = full_dictionary
         # require_message_authenticator=False isolates the EAP-specific
         # policy gate (otherwise the general BlastRADIUS rule fires first).
-        server = DummyServer(
-            dictionary=dictionary, require_message_authenticator=False
-        )
+        server = DummyServer(dictionary=dictionary, require_message_authenticator=False)
         pkt = packet.AuthPacket(
             id=1,
             secret=b"secret",
@@ -171,9 +163,7 @@ class TestServerAsync:
         with pytest.raises(PacketError, match="EAP-Message requires"):
             server.validate_message_authenticator_policy(parsed)
 
-    def test_create_reply_packet_adds_ma_when_policy_requires_it(
-        self, full_dictionary
-    ):
+    def test_create_reply_packet_adds_ma_when_policy_requires_it(self, full_dictionary):
         dictionary = full_dictionary
         server = DummyServer(
             dictionary=dictionary,
