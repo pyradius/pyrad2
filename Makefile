@@ -91,4 +91,7 @@ scenario_radsec:
 scenario_radsec_v11:
 	uv run python scenarios/radsec_v11.py
 
-demo: scenario_auth scenario_acct scenario_coa scenario_status scenario_dedup scenario_radsec scenario_radsec_v11
+scenario_proxy:
+	uv run python scenarios/proxy.py
+
+demo: scenario_auth scenario_acct scenario_coa scenario_status scenario_dedup scenario_radsec scenario_radsec_v11 scenario_proxy

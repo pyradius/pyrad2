@@ -73,6 +73,7 @@ make scenario_status       # Status-Server health check (RFC 5997)
 make scenario_dedup        # Duplicate detection (RFC 5080)
 make scenario_radsec       # RadSec over mutual TLS (RFC 6614)
 make scenario_radsec_v11   # RADIUS/1.1 over RadSec (RFC 9765)
+make scenario_proxy        # Client → Proxy → Upstream RADIUS server (RFC 2865 §2)
 ```
 
 Watch the actual bytes on the wire by setting `PYRAD2_TRACE=1` on any script:

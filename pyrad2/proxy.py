@@ -72,16 +72,13 @@ class Proxy(Server):
             fd (socket.socket): socket to read packet from
         """
         if fd.fileno() == self._proxyfd.fileno():
-            # FIXME: ``Server._grab_packet`` lost its ``pktgen`` parameter
-            # in the M1 router refactor — proxy needs its own grab method
-            # because the reply-side parse runs without a known host secret.
-            # See review item L1 / proxy.py. Type-ignored to keep mypy
-            # green; this code path is exercised only via the proxy demo
-            # which doesn't run in CI.
-            pkt = self._grab_packet(  # type: ignore[call-arg]
-                lambda data, s=self: s.create_packet(packet=data),  # type: ignore[arg-type]
-                fd,
-            )
+            # ``Server._grab_packet`` parses with the secret looked up
+            # from ``self.hosts`` — for replies on the proxy socket the
+            # source is an upstream RADIUS server, which the operator
+            # must register in ``hosts`` the same way downstream NASes
+            # are. ``parse_packet`` dispatches the right Packet subclass
+            # by code (AccessAccept / AccountingResponse / …).
+            pkt = self._grab_packet(fd)
             self._handle_proxy_packet(pkt)
         else:
             Server._process_input(self, fd)
