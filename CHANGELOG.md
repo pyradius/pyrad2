@@ -4,13 +4,81 @@ Changelog
 3.1 - Unreleased
 ----------------
 
-This release is about **real-world FreeRADIUS interop**. pyrad2 now ships
-a conformance suite that loads the upstream FreeRADIUS dictionary corpus
-and decodes its packet test vectors on every CI run, and every gap the
-suite surfaced got a real codec. As of this entry, 281 dictionaries (RFC
-base, FreeRADIUS-internal, and vendor) plus all 41 of the v4 packet test
-vectors pass; only four dictionaries still ``xfail``, and three of those
-are upstream FreeRADIUS dictionary bugs.
+pyrad2 now ships a conformance suite that loads the upstream
+FreeRADIUS dictionary corpus and decodes its packet test vectors on
+every CI run, and every gap the suite surfaced got a real codec. 
+
+As of this entry, 281 dictionaries (RFC base, FreeRADIUS-internal, 
+and vendor) plus all 41 of the v4 packet test vectors pass; only four
+dictionaries still ``xfail``. Three of those are upstream
+FreeRADIUS dictionary bugs.
+
+A shared ``RetryPolicy`` powering backoff/jitter on both sync and async 
+clients, an ``EapMethod`` ABC + registry so new EAP methods plug in 
+without touching the clients, a fixed proxy reply path with a demo 
+scenario, an ``ipv4prefix`` codec, and PEP 561 typing (``py.typed``).
+
+# Client transport and retries
+
+- **New ``pyrad2.retry.RetryPolicy``** shared between sync ``Client``
+  and ``ClientAsync``. Carries ``retries``, base ``timeout``,
+  ``backoff`` multiplier, ``jitter`` fraction, and ``max_wait``. The
+  legacy ``retries=`` / ``timeout=`` constructor kwargs continue to
+  build a flat-schedule policy under the hood, and the
+  ``client.retries`` / ``client.timeout`` attributes remain
+  read/write-able (proxied through ``_LegacyAttrMixin``) for the test
+  suites and tools that depend on them.
+- **Async timeout handler is per-attempt**, not per-flow. The handler
+  now consults ``RetryPolicy.wait_for(attempt)`` for each pending
+  request individually, so backoff and jitter actually take effect on
+  retries rather than just on the first send.
+- **Sync ``Acct-Delay-Time`` bumps reflect the actual wait** of the
+  previous attempt rather than always the base ``timeout``, so the
+  field is correct when backoff is enabled.
+
+# EAP plumbing
+
+- **``pyrad2.eap`` promoted from a flat module to a package**
+  (``pyrad2/eap/`` with ``base.py`` + ``md5.py``). All historical names
+  — ``build_eap_identity``, ``inject_eap_identity``,
+  ``apply_eap_md5_challenge``, ``password_from_packet``,
+  ``EAP_MESSAGE_ATTR``, ``STATE_ATTR``, etc, remain importable from
+  ``pyrad2.eap`` unchanged.
+- **New ``EapMethod`` ABC + registry** (``register_method``,
+  ``get_method``, ``registered_methods``). Each method is a
+  zero-argument factory so stateful methods (multi-round flows) get a
+  fresh instance per conversation without leaking state between
+  concurrent clients. ``Md5Method`` is the first method registered.
+- **Sync / async / RadSec clients now share one challenge loop.** The
+  hard-coded ``if pkt.auth_type == "eap-md5"`` branch is gone from
+  ``Client.send_packet``, ``ClientAsync._send_auth_packet``, and
+  ``RadSecClient.send_packet``; instead each looks up the method via
+  ``eap.get_method(pkt.auth_type)`` and drives ``start`` /
+  ``respond`` in a method-agnostic loop. Adding a new EAP method is
+  now a registration call — no client edits.
+
+# Proxy
+
+- **Fixed ``Proxy._process_input`` call site** for the post-router
+  refactor. The reply socket now calls ``self._grab_packet(fd)``
+  matching the current ``Server._grab_packet`` signature;
+  ``parse_packet`` dispatches the correct ``Packet`` subclass by code
+  for the inbound reply.
+- **New ``scenarios/proxy.py``** a single-process demo wiring a
+  downstream sync ``Client`` through a ``Proxy`` to an upstream sync
+  ``Server`` in threads. Runs as ``make scenario_proxy`` and joins the
+  ``make demo`` target.
+
+# Wire codecs
+
+- **``ipv4prefix`` data type** (RFC 5090). Full encode/decode in
+  ``pyrad2.tools``.
+
+# Typing
+
+- **PEP 561 ``py.typed`` marker** so downstream callers get pyrad2's
+  inline type hints under ``mypy`` / ``pyright`` without any
+  additional packaging.
 
 # FreeRADIUS conformance suite (NEW)
 

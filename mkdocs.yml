@@ -39,6 +39,7 @@ nav:
       - eap: api/eap.md
       - chap: api/chap.md
       - mschap: api/mschap.md
+      - retry: api/retry.md
 
 markdown_extensions:
   - pymdownx.highlight:
