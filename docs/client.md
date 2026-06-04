@@ -85,6 +85,55 @@ req = client.create_auth_packet(
 reply = await client.send_packet(req)
 ```
 
+Under the hood, the client looks up the method via `pyrad2.eap.get_method(pkt.auth_type)` and drives it through a transport-neutral challenge loop. Registering a new method is a one-call addition:
+
+```python
+from pyrad2.eap import EapMethod, register_method
+
+class FooMethod(EapMethod):
+    def start(self, pkt): ...
+    def respond(self, pkt, challenge): ...
+
+register_method("eap-foo", FooMethod)
+```
+
+Callers then set `req.auth_type = "eap-foo"` and the existing client loop drives `start` before the first send and `respond` after every `Access-Challenge` until the server returns `Access-Accept` / `Access-Reject`.
+
+## Retries and backoff
+
+`Client` and `ClientAsync` share a `RetryPolicy` (`pyrad2.retry.RetryPolicy`) covering how many retransmissions to attempt, the base wait, exponential backoff, jitter, and a hard cap. The legacy `retries=` / `timeout=` kwargs still work — they build a flat-schedule policy under the hood:
+
+```python
+ClientAsync(server="...", retries=3, timeout=5)
+# equivalent to:
+ClientAsync(
+    server="...",
+    retry_policy=RetryPolicy(retries=3, timeout=5.0),
+)
+```
+
+For backoff or jitter, pass an explicit `retry_policy`:
+
+```python
+from pyrad2.retry import RetryPolicy
+from pyrad2.client_async import ClientAsync
+
+client = ClientAsync(
+    server="radius.example.com",
+    secret=b"...",
+    dict=dictionary,
+    retry_policy=RetryPolicy(
+        retries=4,
+        timeout=2.0,
+        backoff=2.0,    # 2s, 4s, 8s, 16s
+        jitter=0.1,     # ±10% noise per wait — avoids lockstep retries
+        max_wait=30.0,  # cap any single wait at 30s
+    ),
+)
+```
+
+The async timeout handler consults `wait_for(attempt)` per pending request, so backoff applies to each retry independently. On the sync side, `Acct-Delay-Time` is bumped by the *actual* wait of the previous attempt (not the base timeout), so accounting requests stay correct under backoff.
+
 ## Message-Authenticator
 
 By default (`enforce_ma=True`) pyrad2 stamps `Message-Authenticator` onto every outgoing `Access-Request` and refuses any `Access-Accept` / `Reject` / `Challenge` reply that doesn't carry one. This mitigates [BlastRADIUS (CVE-2024-3596)](https://www.blastradius.fail/) without any extra wiring on your side.

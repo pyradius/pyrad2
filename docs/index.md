@@ -47,6 +47,16 @@ if reply.code == PacketType.AccessAccept:
 
 </div>
 
+!!! note "What's new in 3.1"
+
+    - **FreeRADIUS conformance suite** — 281 vendor/RFC/internal dictionaries plus all 41 of FreeRADIUS v4's `decode-proto` packet vectors regression-tested against upstream. See [FreeRADIUS Conformance](conformance.md).
+    - **Shared `RetryPolicy`** with exponential backoff, jitter, and per-attempt waits — works on both sync `Client` and `ClientAsync`. The legacy `retries=` / `timeout=` kwargs continue to behave identically. See [Retries and backoff](client.md#retries-and-backoff).
+    - **`EapMethod` ABC + registry.** `pyrad2.eap` is now a package; the sync, async, and RadSec clients share one method-agnostic challenge loop. Adding a new method is a `register_method("eap-foo", FooMethod)` call.
+    - **`ipv4prefix` codec** (RFC 5090) — full encode/decode wired into `encode_attr` / `decode_attr`.
+    - **PEP 561 typing** — `py.typed` ships in the wheel.
+    - **Proxy fix + `make scenario_proxy`** demo wiring a downstream client through a `Proxy` to an upstream `Server` in one process.
+    - Full release notes in [CHANGELOG.md](https://github.com/pyradius/pyrad2/blob/master/CHANGELOG.md).
+
 ## What's in the box
 
 | Feature | Spec |
