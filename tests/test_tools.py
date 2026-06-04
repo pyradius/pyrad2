@@ -131,6 +131,56 @@ class TestEncoding:
         raw = tools.encode_attr("combo-ip", "2001:db8::42")
         assert tools.decode_attr("combo-ip", raw) == "2001:db8::42"
 
+    def test_ipv4_prefix_encoding_with_explicit_length(self):
+        # 0 reserved + prefixlen + 4-byte network address.
+        assert tools.encode_ipv4_prefix("192.0.2.0/24") == (
+            b"\x00\x18\xc0\x00\x02\x00"
+        )
+
+    def test_ipv4_prefix_encoding_zeroes_host_bits(self):
+        # Bits beyond the prefix length must not leak onto the wire.
+        assert tools.encode_ipv4_prefix("10.1.2.3/16") == (
+            b"\x00\x10\x0a\x01\x00\x00"
+        )
+
+    def test_ipv4_prefix_encoding_defaults_to_full_host(self):
+        # Bare address with no slash → /32 default.
+        assert tools.encode_ipv4_prefix("192.0.2.1") == (
+            b"\x00\x20\xc0\x00\x02\x01"
+        )
+
+    def test_ipv4_prefix_encoding_accepts_typed_inputs(self):
+        from ipaddress import IPv4Address, IPv4Network
+
+        assert tools.encode_ipv4_prefix(IPv4Address("10.0.0.1")) == (
+            b"\x00\x20\x0a\x00\x00\x01"
+        )
+        assert tools.encode_ipv4_prefix(IPv4Network("198.51.100.0/22")) == (
+            b"\x00\x16\xc6\x33\x64\x00"
+        )
+
+    def test_ipv4_prefix_encoding_rejects_v6(self):
+        with pytest.raises(ValueError):
+            tools.encode_ipv4_prefix("2001:db8::/32")
+        with pytest.raises(TypeError):
+            tools.encode_ipv4_prefix(42)
+
+    def test_ipv4_prefix_decoding_full_form(self):
+        assert tools.decode_ipv4_prefix(b"\x00\x18\xc0\x00\x02\x00") == "192.0.2.0/24"
+        assert tools.decode_ipv4_prefix(b"\x00\x20\xc0\x00\x02\x01") == "192.0.2.1/32"
+
+    def test_ipv4_prefix_decoding_accepts_trimmed_form(self):
+        # Some peers strip trailing zero address bytes; zero-pad on decode.
+        assert tools.decode_ipv4_prefix(b"\x00\x10\x0a\x01") == "10.1.0.0/16"
+
+    def test_ipv4_prefix_decoding_rejects_truncated_header(self):
+        with pytest.raises(ValueError):
+            tools.decode_ipv4_prefix(b"\x00")
+
+    def test_ipv4_prefix_roundtrips_via_encode_attr(self):
+        raw = tools.encode_attr("ipv4prefix", "203.0.113.0/24")
+        assert tools.decode_attr("ipv4prefix", raw) == "203.0.113.0/24"
+
     def test_ifid_encoding_roundtrip(self):
         text = "0011:2233:4455:6677"
         raw = tools.encode_ifid(text)

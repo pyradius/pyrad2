@@ -90,9 +90,7 @@ DATATYPES = frozenset(
         "vsa",
         # ``ipv4prefix`` (RFC 5090) is the IPv4 mirror of ``ipv6prefix``:
         # 1 reserved octet, 1 prefix-length octet, 4 address octets.
-        # Accepted at the parser layer so dictionaries declaring it
-        # (e.g. ``dictionary.rfc6572``) load. Wire-level encode/decode
-        # for it is a separate TODO.
+        # Wire codec lives in ``tools.py``.
         "ipv4prefix",
         # ``combo-ip`` is FreeRADIUS's "either IPv4 or IPv6, decided at
         # runtime by the on-wire length" type — 4 bytes for IPv4, 16 for

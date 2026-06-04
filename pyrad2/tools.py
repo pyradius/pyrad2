@@ -96,6 +96,37 @@ def encode_ipv6_prefix(addr: str, default_prefixlen: int = 128) -> bytes:
     return struct.pack("2B", *[0, net.prefixlen]) + net.network_address.packed
 
 
+def encode_ipv4_prefix(addr: str, default_prefixlen: int = 32) -> bytes:
+    """Encode an IPv4 prefix (RFC 5090) to 6-byte format.
+
+    The wire layout is: 1 reserved byte (``0``), 1 prefix-length byte
+    (``0..32``), 4 bytes of network address. Bits beyond the prefix
+    length are zeroed. Accepts ``"a.b.c.d/len"``, a bare ``"a.b.c.d"``
+    (treated as ``/default_prefixlen``), an ``IPv4Network``, or an
+    ``IPv4Address``.
+    """
+    if isinstance(addr, IPv4Network):
+        net = addr
+    elif isinstance(addr, IPv4Address):
+        net = IPv4Network((addr, default_prefixlen), strict=False)
+    elif isinstance(addr, str):
+        if "/" in addr:
+            net = ip_network(addr, strict=False)
+        else:
+            net = IPv4Network((IPv4Address(addr), default_prefixlen), strict=False)
+    elif hasattr(addr, "ip") and hasattr(addr, "prefixlen"):  # netaddr
+        return struct.pack("2B", 0, int(addr.prefixlen)) + addr.value.packed
+    else:
+        raise TypeError(
+            "IPv4 Prefix has to be a string, IPv4Network, IPv4Address, or netaddr IPNetwork"
+        )
+
+    if getattr(net, "version", None) != 4:
+        raise ValueError("not an IPv4 prefix")
+
+    return struct.pack("2B", 0, net.prefixlen) + net.network_address.packed
+
+
 def encode_ipv6_address(addr: str | IPv6Address) -> bytes:
     """Encode an IPv6 address (as string) to 16-byte format."""
     if isinstance(addr, IPv6Address):
@@ -336,6 +367,26 @@ def decode_ipv6_prefix(addr: bytes | bytearray) -> str:
     return str(IPv6Network((prefix, int(length)), strict=False))
 
 
+def decode_ipv4_prefix(addr: bytes | bytearray) -> str:
+    """Decode an IPv4 prefix (RFC 5090) into ``a.b.c.d/len`` form.
+
+    Wire layout: 1 reserved byte, 1 prefix-length byte, then 0..4 bytes
+    of address (the variable form FreeRADIUS emits when bits beyond the
+    prefix length are trimmed). Short payloads are zero-padded to a full
+    4-byte address; ``strict=False`` masks any nonzero host bits a peer
+    happens to leave on the wire.
+    """
+    if len(addr) < 2:
+        raise ValueError(
+            f"ipv4prefix value must be at least 2 bytes, got {len(addr)}"
+        )
+    addr = bytes(addr) + b"\x00" * (6 - len(addr))
+    _, length = struct.unpack("!BB", addr[:2])
+    prefix_bytes = addr[2:6]
+    prefix = IPv4Address(prefix_bytes)
+    return str(IPv4Network((prefix, int(length)), strict=False))
+
+
 def decode_ipv6_address(addr: bytes | bytearray) -> str:
     """Decode 16-byte IPv6 address into a readable string."""
     # RADIUS IPv6-Prefix is: 2 bytes (reserved, prefixlen) + prefix bytes (0..16)
@@ -391,6 +442,8 @@ def encode_attr(datatype: str, value) -> bytes | str:
         return encode_address(value)
     elif datatype == "ipv6prefix":
         return encode_ipv6_prefix(value)
+    elif datatype == "ipv4prefix":
+        return encode_ipv4_prefix(value)
     elif datatype == "ipv6addr":
         return encode_ipv6_address(value)
     elif datatype == "combo-ip":
@@ -427,6 +480,8 @@ def decode_attr(datatype: str, value) -> bytes | str:
         return decode_address(value)
     elif datatype == "ipv6prefix":
         return decode_ipv6_prefix(value)
+    elif datatype == "ipv4prefix":
+        return decode_ipv4_prefix(value)
     elif datatype == "ipv6addr":
         return decode_ipv6_address(value)
     elif datatype == "combo-ip":
