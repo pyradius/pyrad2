@@ -68,19 +68,14 @@ def _build_eap_md5_request(dictionary: Dictionary) -> bytes:
     return pkt.request_packet()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Known bug — pyrad2/packet.py:_encode_v10_eap_md5_request appends a "
-        "tail Message-Authenticator on top of the one ensure_message_authenticator "
-        "stamps into the attribute list, yielding two MA AVPs on the wire. "
-        "Conformant RADIUS servers (FreeRADIUS, Windows NPS) reject this as "
-        "malformed. Fixing it removes the EAP-MD5-specific encoder branch and "
-        "routes through _encode_v10_request_with_random_authenticator. When the "
-        "fix lands the strict xfail trips and forces this marker off."
-    ),
-)
 def test_eap_md5_access_request_has_exactly_one_message_authenticator(dictionary):
+    # Regression guard. An earlier ``_encode_v10_eap_md5_request`` branch
+    # appended a tail Message-Authenticator on top of the one
+    # ``ensure_message_authenticator`` already stamped into the attribute
+    # list, putting two MAs on the wire. Conformant RADIUS servers
+    # (FreeRADIUS, Windows NPS) reject that as malformed; the EAP-MD5
+    # scenario hit this against a real server before the encoder branch
+    # was removed in favour of the standard random-authenticator path.
     raw = _build_eap_md5_request(dictionary)
     assert _count_avps(raw, 80) == 1
 
