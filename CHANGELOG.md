@@ -7,10 +7,10 @@ Changelog
 This release is about **real-world FreeRADIUS interop**. pyrad2 now ships
 a conformance suite that loads the upstream FreeRADIUS dictionary corpus
 and decodes its packet test vectors on every CI run, and every gap the
-suite surfaced got a real codec. As of this entry, 281 of the 244 vendor 
-dictionaries plus 41 of the v4 packet test vectors pass; only four 
-dictionaries still ``xfail``, and three of those are upstream 
-FreeRADIUS dictionary bugs.
+suite surfaced got a real codec. As of this entry, 281 dictionaries (RFC
+base, FreeRADIUS-internal, and vendor) plus all 41 of the v4 packet test
+vectors pass; only four dictionaries still ``xfail``, and three of those
+are upstream FreeRADIUS dictionary bugs.
 
 # FreeRADIUS conformance suite (NEW)
 
