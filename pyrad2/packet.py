@@ -2137,39 +2137,17 @@ class AuthPacket(Packet):
         v11 = self._ensure_id_and_short_circuit_v11()
         if v11 is not None:
             return v11
-        if self.auth_type == "eap-md5":
-            return self._encode_v10_eap_md5_request()
+        # EAP-MD5 (and every other EAP method) goes through the standard
+        # random-authenticator encoder. RFC 3579 §3.2 only requires the
+        # ``Message-Authenticator`` attribute to be present on requests
+        # carrying ``EAP-Message`` — its position inside the attribute
+        # list is not normative — so the in-attrs MA produced by
+        # ``ensure_message_authenticator`` + ``_refresh_message_authenticator``
+        # is RFC-compliant. Earlier revisions kept a dedicated
+        # ``_encode_v10_eap_md5_request`` that appended an *additional*
+        # tail MA on top of the in-attrs one, which yielded two MA AVPs
+        # on the wire and tripped every conformant server's MA check.
         return self._encode_v10_request_with_random_authenticator()
-
-    def _encode_v10_eap_md5_request(self) -> bytes:
-        """Encode an Access-Request whose Message-Authenticator MUST land
-        in a fixed AVP slot for the EAP-MD5 handshake.
-
-        Distinct from the generic ``_encode_v10_request_with_random_authenticator``
-        because the MA digest is computed over the partially-built packet
-        (header + attrs + zeroed MA AVP) and only then appended.
-        """
-        if self.authenticator is None:
-            self.authenticator = self.create_authenticator()
-        if self.message_authenticator:
-            self._refresh_message_authenticator()
-        attr = self._pkt_encode_attributes()
-        header = struct.pack(
-            "!BBH16s",
-            self.code,
-            self.id,
-            (20 + 18 + len(attr)),
-            self.authenticator,
-        )
-        digest = hmac_new(
-            self.secret,
-            header + attr + struct.pack("!BB16s", 80, struct.calcsize("!BB16s"), b""),
-        ).digest()
-        raw = (
-            header + attr + struct.pack("!BB16s", 80, struct.calcsize("!BB16s"), digest)
-        )
-        _trace_packet("out", raw, self)
-        return raw
 
     def pw_decrypt(self, password: bytes) -> str:
         """De-Obfuscate a RADIUS password.

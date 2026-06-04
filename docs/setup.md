@@ -18,6 +18,33 @@ This page takes you from zero to a working RADIUS exchange in about 30 seconds -
 
 pyrad2 requires Python **3.12 or newer**.
 
+### Optional: MS-CHAPv2 support
+
+MS-CHAPv2 and EAP-MSCHAPv2 (RFC 2759) need a DES primitive that modern
+Python stacks no longer expose. If you plan to use either method,
+install with the `[mschap]` extra:
+
+=== "pip"
+
+    ```bash
+    pip install "pyrad2[mschap]"
+    ```
+
+=== "uv"
+
+    ```bash
+    uv add "pyrad2[mschap]"
+    ```
+
+This pulls in the [`cryptography`](https://cryptography.io) package
+(~3 MB on install). MD4 (the other primitive MS-CHAPv2 needs) is
+bundled inside pyrad2 — no separate dependency. Every other
+authentication method pyrad2 ships (PAP, CHAP, EAP-MD5, EAP-GTC) works
+with the base install.
+
+See [Authentication Methods](auth.md) for the full method matrix and
+client snippets.
+
 ## 2. RADIUS in one minute
 
 If you've never worked with RADIUS, here's what you need to know before reading another line.

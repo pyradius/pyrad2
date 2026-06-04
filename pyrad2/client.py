@@ -185,8 +185,8 @@ class Client(host._ClientPacketFactoryMixin, _LegacyAttrMixin, host.Host):
             for attempt in range(self.retry_policy.retries):
                 if attempt and is_acct:
                     if "Acct-Delay-Time" in pkt:
-                        pkt["Acct-Delay-Time"] = (
-                            pkt["Acct-Delay-Time"][0] + int(previous_wait)
+                        pkt["Acct-Delay-Time"] = pkt["Acct-Delay-Time"][0] + int(
+                            previous_wait
                         )
                     else:
                         pkt["Acct-Delay-Time"] = int(previous_wait)

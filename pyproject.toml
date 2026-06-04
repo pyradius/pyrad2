@@ -30,6 +30,18 @@ dependencies = [
     "loguru>=0.7.3",
 ]
 
+[project.optional-dependencies]
+# MS-CHAPv2 / EAP-MSCHAPv2 need exactly two primitives:
+#  - MD4: bundled in ``pyrad2/_md4.py`` (textbook RFC 1320, ~80 lines).
+#    No external dependency.
+#  - DES (single 8-byte block, three independent invocations per
+#    response): sourced from ``cryptography``. Pure-Python DES is
+#    enough subtle bit-twiddling that we prefer a FIPS-validated impl
+#    over bundling our own.
+# Install via:
+#     pip install pyrad2[mschap]
+mschap = ["cryptography>=43.0"]
+
 [project.urls]
 Repository = "https://github.com/pyradius/pyrad2"
 Documentation = "https://pyradius.github.io/pyrad2/"
@@ -44,6 +56,10 @@ dev = [
     "pytest-cov>=7.1.0",
     "pytest-sugar>=1.1.1",
     "ruff>=0.15.15",
+    # Pulled in so the MS-CHAPv2 tests under tests/test_mschap.py can
+    # exercise the DES path locally; production users install the same
+    # dep via the ``[mschap]`` extra.
+    "cryptography>=43.0",
 ]
 docs = [
     "mkdocs>=1.6.1",

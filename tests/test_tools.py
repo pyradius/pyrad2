@@ -133,21 +133,15 @@ class TestEncoding:
 
     def test_ipv4_prefix_encoding_with_explicit_length(self):
         # 0 reserved + prefixlen + 4-byte network address.
-        assert tools.encode_ipv4_prefix("192.0.2.0/24") == (
-            b"\x00\x18\xc0\x00\x02\x00"
-        )
+        assert tools.encode_ipv4_prefix("192.0.2.0/24") == (b"\x00\x18\xc0\x00\x02\x00")
 
     def test_ipv4_prefix_encoding_zeroes_host_bits(self):
         # Bits beyond the prefix length must not leak onto the wire.
-        assert tools.encode_ipv4_prefix("10.1.2.3/16") == (
-            b"\x00\x10\x0a\x01\x00\x00"
-        )
+        assert tools.encode_ipv4_prefix("10.1.2.3/16") == (b"\x00\x10\x0a\x01\x00\x00")
 
     def test_ipv4_prefix_encoding_defaults_to_full_host(self):
         # Bare address with no slash → /32 default.
-        assert tools.encode_ipv4_prefix("192.0.2.1") == (
-            b"\x00\x20\xc0\x00\x02\x01"
-        )
+        assert tools.encode_ipv4_prefix("192.0.2.1") == (b"\x00\x20\xc0\x00\x02\x01")
 
     def test_ipv4_prefix_encoding_accepts_typed_inputs(self):
         from ipaddress import IPv4Address, IPv4Network

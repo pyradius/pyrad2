@@ -74,6 +74,10 @@ make scenario_dedup        # Duplicate detection (RFC 5080)
 make scenario_radsec       # RadSec over mutual TLS (RFC 6614)
 make scenario_radsec_v11   # RADIUS/1.1 over RadSec (RFC 9765)
 make scenario_proxy        # Client → Proxy → Upstream RADIUS server (RFC 2865 §2)
+make scenario_auth_chap          # CHAP authentication (RFC 1994)
+make scenario_auth_eap_md5       # EAP-MD5 (RFC 3748)
+make scenario_auth_eap_gtc       # EAP-GTC (RFC 3748)
+make scenario_auth_eap_mschapv2  # EAP-MSCHAPv2 (RFC 2759), needs pyrad2[mschap]
 ```
 
 Watch the actual bytes on the wire by setting `PYRAD2_TRACE=1` on any script:

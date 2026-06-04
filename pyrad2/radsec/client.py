@@ -426,11 +426,7 @@ class RadSecClient(_ClientPacketFactoryMixin):
         if method is not None:
             method.start(packet)
         reply = await self._send_packet(packet)
-        while (
-            method is not None
-            and reply
-            and reply.code == PacketType.AccessChallenge
-        ):
+        while method is not None and reply and reply.code == PacketType.AccessChallenge:
             method.respond(packet, reply)
             reply = await self._send_packet(packet)
         return reply

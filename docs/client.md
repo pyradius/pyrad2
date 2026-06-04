@@ -67,9 +67,14 @@ req["Framed-IP-Address"] = "10.0.0.100"
 
 A list of standard RADIUS attributes lives in [RFC 2865 §5](https://datatracker.ietf.org/doc/html/rfc2865#section-5). Vendor-specific attributes come from your vendor dictionary.
 
-## EAP-MD5
+## Authentication methods
 
-Both sync and async clients handle the EAP-MD5 challenge round-trip transparently. Pass `auth_type="eap-md5"` along with `User-Password`; the client injects an EAP-Identity, processes the server's `Access-Challenge` (computing the MD5 response, copying the `State`), and surfaces only the final `Access-Accept` / `Access-Reject`.
+PAP (cleartext `User-Password`) is the default. For CHAP, EAP-MD5,
+EAP-GTC, MS-CHAPv2, and EAP-MSCHAPv2, see the dedicated
+[Authentication Methods](auth.md) page. The shortest version: set
+`req.auth_type = "eap-md5"` (or `"eap-gtc"`, `"eap-mschapv2"`) and the
+client loop drives the challenge exchange automatically. MS-CHAPv2 /
+EAP-MSCHAPv2 need an optional dependency — `pip install pyrad2[mschap]`.
 
 ```python
 req = client.create_auth_packet(

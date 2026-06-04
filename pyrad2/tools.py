@@ -377,9 +377,7 @@ def decode_ipv4_prefix(addr: bytes | bytearray) -> str:
     happens to leave on the wire.
     """
     if len(addr) < 2:
-        raise ValueError(
-            f"ipv4prefix value must be at least 2 bytes, got {len(addr)}"
-        )
+        raise ValueError(f"ipv4prefix value must be at least 2 bytes, got {len(addr)}")
     addr = bytes(addr) + b"\x00" * (6 - len(addr))
     _, length = struct.unpack("!BB", addr[:2])
     prefix_bytes = addr[2:6]

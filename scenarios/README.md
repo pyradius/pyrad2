@@ -32,7 +32,11 @@ make scenario_dedup        # Duplicate detection / response cache (RFC 5080)
 make scenario_radsec       # RadSec (RFC 6614) — mutual TLS, Access-Request
 make scenario_radsec_v11   # RADIUS/1.1 (RFC 9765) — ALPN-negotiated v1.1 over RadSec
 make scenario_proxy        # Client → Proxy → Upstream — RADIUS proxy data flow
-make demo                  # all eight sequentially
+make scenario_auth_chap            # CHAP authentication (RFC 1994 / 2865 §2.2)
+make scenario_auth_eap_md5         # EAP-MD5 challenge/response (RFC 3748 §5.4)
+make scenario_auth_eap_gtc         # EAP-GTC prompt-and-response (RFC 3748 §5.6)
+make scenario_auth_eap_mschapv2    # EAP-MSCHAPv2 — needs pip install pyrad2[mschap]
+make demo                  # all of the above sequentially
 ```
 
 The RadSec scenario uses the test certificates in `examples/certs/`,

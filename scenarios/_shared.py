@@ -69,3 +69,27 @@ def trace_hint() -> None:
         logger.info(
             "tip: re-run with PYRAD2_TRACE=1 to see wire bytes + decoded AVPs"
         )
+
+
+def attribute_bytes(value: bytes | str) -> bytes:
+    """Coerce a pyrad2 attribute value back to raw bytes.
+
+    Attributes the RFC text calls "string" (``EAP-Message``,
+    ``CHAP-Challenge``, ``State``, etc.) are decoded through
+    ``tools.decode_string``, which UTF-8-decodes the wire bytes when
+    they are valid UTF-8 and otherwise returns ``orig.hex()`` — a plain
+    ASCII hex digest with no marker prefix. Server-side handlers that
+    want to parse binary EAP/CHAP framing therefore have to reverse the
+    conversion. This helper takes either a ``str`` (hex from
+    ``decode_string``) or ``bytes`` (raw octets straight off the wire)
+    and yields the bytes.
+    """
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        try:
+            return bytes.fromhex(value)
+        except ValueError:
+            # Pure-UTF-8 text payload — encode back the way it came in.
+            return value.encode("utf-8")
+    raise TypeError(f"Cannot coerce {type(value).__name__} to bytes")

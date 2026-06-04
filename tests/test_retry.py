@@ -8,7 +8,6 @@ to the frozen-dataclass policy.
 """
 
 import random
-import pytest
 
 from pyrad2.retry import RetryPolicy, policy_from_legacy
 

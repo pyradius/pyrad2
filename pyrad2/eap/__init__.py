@@ -36,6 +36,16 @@ from pyrad2.eap.base import (
     register_method,
     registered_methods,
 )
+from pyrad2.eap.gtc import (
+    EAP_TYPE_GTC,
+    GtcMethod,
+    apply_eap_gtc_challenge,
+    build_eap_gtc_response,
+)
+from pyrad2.eap.mschapv2 import (
+    EAP_TYPE_MSCHAPV2,
+    MschapV2Method,
+)
 from pyrad2.eap.md5 import (
     EAP_MESSAGE_ATTR,
     STATE_ATTR,
@@ -49,19 +59,30 @@ from pyrad2.eap.md5 import (
     password_from_packet,
 )
 
-# The class is its own zero-argument factory (no state to carry across
-# conversations), so registering ``Md5Method`` directly is fine.
+# Stateless methods register their class directly — the class is its
+# own zero-argument factory because nothing crosses conversations.
 register_method("eap-md5", Md5Method)
+register_method("eap-gtc", GtcMethod)
+# EAP-MSCHAPv2 is stateful (peer challenge + NT-Response carry across
+# rounds for the Success-Request check); the factory shape ensures
+# every conversation gets its own instance.
+register_method("eap-mschapv2", MschapV2Method)
 
 __all__ = [
     "EAP_MESSAGE_ATTR",
+    "EAP_TYPE_GTC",
+    "EAP_TYPE_MSCHAPV2",
     "STATE_ATTR",
     "USER_NAME_ATTR",
     "USER_PASSWORD_ATTR",
     "EapMethod",
+    "GtcMethod",
     "Md5Method",
     "MethodFactory",
+    "MschapV2Method",
+    "apply_eap_gtc_challenge",
     "apply_eap_md5_challenge",
+    "build_eap_gtc_response",
     "build_eap_identity",
     "build_eap_md5_challenge",
     "get_method",

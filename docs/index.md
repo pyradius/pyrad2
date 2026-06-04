@@ -60,6 +60,7 @@ if reply.code == PacketType.AccessAccept:
 | BlastRADIUS-safe defaults | [CVE-2024-3596](https://www.blastradius.fail/) - `Message-Authenticator` enforced on `Access-Request` out of the box |
 | FreeRADIUS dictionary support | Extended attributes, vendor formats, EVS, nested TLVs, WiMAX continuation, RFC 8044 arrays - see [Dictionary Reference](dictionary.md) |
 | FreeRADIUS interop conformance | 281 dictionaries + 41 packet vectors regression-tested against upstream FreeRADIUS - see [FreeRADIUS Conformance](conformance.md) |
+| Authentication methods | PAP, CHAP, EAP-MD5, EAP-GTC out of the box; MS-CHAPv2 + EAP-MSCHAPv2 via `pip install pyrad2[mschap]` - see [Authentication Methods](auth.md) |
 | Wire-level packet tracing | `PYRAD2_TRACE=1` + `PYRAD2_TRACE_UNSAFE=1` |
 
 pyrad2 is a **library**, not a daemon. It is not a drop-in replacement for [FreeRADIUS](https://freeradius.org); it gives you the moving parts to build your own.

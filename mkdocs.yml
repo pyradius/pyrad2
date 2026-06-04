@@ -13,6 +13,7 @@ nav:
   - Guides:
     - Running a RADIUS Server: server.md
     - Making RADIUS Requests: client.md
+    - Authentication Methods: auth.md
     - Dictionary Reference: dictionary.md
     - FreeRADIUS Conformance: conformance.md
   - Migrating from pyrad: compatibility.md
@@ -36,6 +37,8 @@ nav:
       - constants: api/constants.md
       - exceptions: api/exceptions.md
       - eap: api/eap.md
+      - chap: api/chap.md
+      - mschap: api/mschap.md
 
 markdown_extensions:
   - pymdownx.highlight:
