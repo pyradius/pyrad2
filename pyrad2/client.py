@@ -12,9 +12,10 @@ from pyrad2 import eap, host, packet
 from pyrad2.constants import PacketType
 from pyrad2.dictionary import Dictionary
 from pyrad2.exceptions import Timeout
+from pyrad2.retry import RetryPolicy, _LegacyAttrMixin, policy_from_legacy
 
 
-class Client(host._ClientPacketFactoryMixin, host.Host):
+class Client(host._ClientPacketFactoryMixin, _LegacyAttrMixin, host.Host):
     """Basic RADIUS client.
     This class implements a basic RADIUS client. It can send requests
     to a RADIUS server, taking care of timeouts and retries, and
@@ -32,6 +33,7 @@ class Client(host._ClientPacketFactoryMixin, host.Host):
         retries: int = 3,
         timeout: int = 5,
         enforce_ma: bool = True,
+        retry_policy: Optional[RetryPolicy] = None,
     ):
         """Initializes a RADIUS client.
 
@@ -42,19 +44,27 @@ class Client(host._ClientPacketFactoryMixin, host.Host):
             coaport (int): Port to use for CoA packets.
             secret (bytes): RADIUS secret.
             dict (pyrad.dictionary.Dictionary): RADIUS dictionary.
-            retries (int): Number of times to retry sending a RADIUS request.
-            timeout (int): Number of seconds to wait for an answer.
+            retries (int): Number of retransmissions before giving up.
+                Ignored when ``retry_policy`` is supplied.
+            timeout (int): Base seconds to wait for a reply. Ignored
+                when ``retry_policy`` is supplied.
             enforce_ma (bool): Enforce Message-Authenticator on requests
                 and replies (default: True). Mitigates BlastRADIUS
                 (CVE-2024-3596). Disable only when talking to a legacy
                 server that can't process the attribute.
+            retry_policy (RetryPolicy): Optional explicit policy adding
+                exponential backoff and jitter on top of the base
+                ``timeout``. When omitted, a flat policy is built from
+                ``retries`` and ``timeout`` for backwards compatibility.
         """
         super().__init__(authport, acctport, coaport, dict)
 
         self.server = server
         self.secret = secret
-        self.retries = retries
-        self.timeout = timeout
+        # ``retries`` / ``timeout`` attribute access proxies through
+        # ``_LegacyAttrMixin`` to keep ``self.retry_policy`` authoritative
+        # while preserving callers that mutate the legacy names directly.
+        self.retry_policy = policy_from_legacy(retry_policy, retries, timeout)
         self.enforce_ma = enforce_ma
 
         if os.name == "nt":
@@ -168,17 +178,23 @@ class Client(host._ClientPacketFactoryMixin, host.Host):
                 original_acct_delay = list(pkt["Acct-Delay-Time"])
 
         try:
-            for attempt in range(self.retries):
+            # ``previous_wait`` carries the wait the *previous* attempt
+            # imposed before timing out; that's the amount of in-flight
+            # time the next ``Acct-Delay-Time`` bump must reflect.
+            previous_wait = self.retry_policy.timeout
+            for attempt in range(self.retry_policy.retries):
                 if attempt and is_acct:
                     if "Acct-Delay-Time" in pkt:
                         pkt["Acct-Delay-Time"] = (
-                            pkt["Acct-Delay-Time"][0] + self.timeout
+                            pkt["Acct-Delay-Time"][0] + int(previous_wait)
                         )
                     else:
-                        pkt["Acct-Delay-Time"] = self.timeout
+                        pkt["Acct-Delay-Time"] = int(previous_wait)
 
+                wait = self.retry_policy.wait_for(attempt)
+                previous_wait = wait
                 now = time.time()
-                waitto = now + self.timeout
+                waitto = now + wait
 
                 if not self._socket:
                     raise RuntimeError("No socket present")

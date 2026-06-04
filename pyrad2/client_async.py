@@ -21,9 +21,10 @@ from pyrad2.packet import (
     StatusPacket,
     prepare_request_message_authenticator,
 )
+from pyrad2.retry import RetryPolicy, _LegacyAttrMixin, policy_from_legacy
 
 
-class DatagramProtocolClient(asyncio.Protocol):
+class DatagramProtocolClient(_LegacyAttrMixin, asyncio.Protocol):
     def __init__(
         self,
         server: str,
@@ -31,11 +32,13 @@ class DatagramProtocolClient(asyncio.Protocol):
         client: "ClientAsync",
         retries: int = 3,
         timeout: int = 30,
+        retry_policy: Optional[RetryPolicy] = None,
     ):
         self.port = port
         self.server = server
-        self.retries = retries
-        self.timeout = timeout
+        # ``retries`` / ``timeout`` attribute access proxies through
+        # ``_LegacyAttrMixin``.
+        self.retry_policy = policy_from_legacy(retry_policy, retries, timeout)
         self.client = client
 
         # Map of pending requests
@@ -61,7 +64,11 @@ class DatagramProtocolClient(asyncio.Protocol):
             while True:
                 req2delete = []
                 now = datetime.now()
-                next_wake_up = float(self.timeout)
+                # Heartbeat: the bound that applies when no pending
+                # request is closer than the base timeout. Falling back
+                # to ``max_wait`` here would make an idle handler nap up
+                # to 30s and miss freshly-enqueued requests.
+                next_wake_up = float(self.retry_policy.timeout)
 
                 for id, req in self.pending_requests.items():
                     # send_date is always <= now, so compute elapsed as a
@@ -69,8 +76,12 @@ class DatagramProtocolClient(asyncio.Protocol):
                     # wrap negative deltas to ~86399 and prematurely
                     # trigger the timeout branch.
                     elapsed = (now - req["send_date"]).total_seconds()
-                    if elapsed >= self.timeout:
-                        if req["retries"] >= self.retries:
+                    # ``current_wait`` is the policy's wait for the
+                    # attempt currently in flight — retry N timed out
+                    # after ``wait_for(N)`` seconds.
+                    current_wait = self.retry_policy.wait_for(req["retries"])
+                    if elapsed >= current_wait:
+                        if req["retries"] >= self.retry_policy.retries:
                             logger.debug(
                                 "[{}:{}] For request {} execute all retries",
                                 self.server,
@@ -94,7 +105,7 @@ class DatagramProtocolClient(asyncio.Protocol):
                             )
                             self.transport.sendto(req["packet"].request_packet())
                     else:
-                        remaining = self.timeout - elapsed
+                        remaining = current_wait - elapsed
                         if remaining < next_wake_up:
                             next_wake_up = remaining
 
@@ -227,7 +238,7 @@ class DatagramProtocolClient(asyncio.Protocol):
         return self
 
 
-class ClientAsync(_ClientPacketFactoryMixin):
+class ClientAsync(_ClientPacketFactoryMixin, _LegacyAttrMixin):
     """Asyncio-based RADIUS client.
 
     Sends Access-Request, Accounting-Request, CoA, and Status-Server
@@ -253,6 +264,7 @@ class ClientAsync(_ClientPacketFactoryMixin):
         retries: int = 3,
         timeout: int = 30,
         enforce_ma: bool = True,
+        retry_policy: Optional[RetryPolicy] = None,
     ):
         """Initializes an async RADIUS client.
 
@@ -263,17 +275,24 @@ class ClientAsync(_ClientPacketFactoryMixin):
             coa_port (int): Port to use for CoA packets.
             secret (bytes): RADIUS secret.
             dict (pyrad.dictionary.Dictionary): RADIUS dictionary.
-            retries (int): Number of times to retry sending a RADIUS request.
-            timeout (int): Number of seconds to wait for an answer.
+            retries (int): Number of retransmissions before giving up.
+                Ignored when ``retry_policy`` is supplied.
+            timeout (int): Base seconds to wait for a reply. Ignored
+                when ``retry_policy`` is supplied.
             enforce_ma (bool): Enforce Message-Authenticator on requests
                 and replies (default: True). Mitigates BlastRADIUS
                 (CVE-2024-3596). Disable only when talking to a legacy
                 server that can't process the attribute.
+            retry_policy (RetryPolicy): Optional explicit policy adding
+                exponential backoff and jitter on top of the base
+                ``timeout``. When omitted, a flat policy is built from
+                ``retries`` and ``timeout`` for backwards compatibility.
         """
         self.server = server
         self.secret = secret
-        self.retries = retries
-        self.timeout = timeout
+        # ``retries`` / ``timeout`` attribute access proxies through
+        # ``_LegacyAttrMixin``.
+        self.retry_policy = policy_from_legacy(retry_policy, retries, timeout)
         self.dict = dict
         self.enforce_ma = enforce_ma
 
@@ -314,8 +333,7 @@ class ClientAsync(_ClientPacketFactoryMixin):
                 self.server,
                 self.acct_port,
                 self,
-                retries=self.retries,
-                timeout=self.timeout,
+                retry_policy=self.retry_policy,
             )
             bind_addr = None
             if local_addr and local_acct_port:
@@ -334,8 +352,7 @@ class ClientAsync(_ClientPacketFactoryMixin):
                 self.server,
                 self.auth_port,
                 self,
-                retries=self.retries,
-                timeout=self.timeout,
+                retry_policy=self.retry_policy,
             )
             bind_addr = None
             if local_addr and local_auth_port:
@@ -354,8 +371,7 @@ class ClientAsync(_ClientPacketFactoryMixin):
                 self.server,
                 self.coa_port,
                 self,
-                retries=self.retries,
-                timeout=self.timeout,
+                retry_policy=self.retry_policy,
             )
             bind_addr = None
             if local_addr and local_coa_port:

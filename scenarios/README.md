@@ -31,7 +31,8 @@ make scenario_status       # Status-Server health check (RFC 5997)
 make scenario_dedup        # Duplicate detection / response cache (RFC 5080)
 make scenario_radsec       # RadSec (RFC 6614) — mutual TLS, Access-Request
 make scenario_radsec_v11   # RADIUS/1.1 (RFC 9765) — ALPN-negotiated v1.1 over RadSec
-make demo                  # all seven sequentially
+make scenario_proxy        # Client → Proxy → Upstream — RADIUS proxy data flow
+make demo                  # all eight sequentially
 ```
 
 The RadSec scenario uses the test certificates in `examples/certs/`,
