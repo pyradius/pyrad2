@@ -1604,7 +1604,29 @@ validate its replies.</p>
 <span class="normal"><a href="#__codelineno-0-274">274</a></span>
 <span class="normal"><a href="#__codelineno-0-275">275</a></span>
 <span class="normal"><a href="#__codelineno-0-276">276</a></span>
-<span class="normal"><a href="#__codelineno-0-277">277</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18"></a><span class="k">class</span><span class="w"> </span><span class="nc">Client</span><span class="p">(</span><span class="n">host</span><span class="o">.</span><span class="n">_ClientPacketFactoryMixin</span><span class="p">,</span> <span class="n">_LegacyAttrMixin</span><span class="p">,</span> <span class="n">host</span><span class="o">.</span><span class="n">Host</span><span class="p">):</span>
+<span class="normal"><a href="#__codelineno-0-277">277</a></span>
+<span class="normal"><a href="#__codelineno-0-278">278</a></span>
+<span class="normal"><a href="#__codelineno-0-279">279</a></span>
+<span class="normal"><a href="#__codelineno-0-280">280</a></span>
+<span class="normal"><a href="#__codelineno-0-281">281</a></span>
+<span class="normal"><a href="#__codelineno-0-282">282</a></span>
+<span class="normal"><a href="#__codelineno-0-283">283</a></span>
+<span class="normal"><a href="#__codelineno-0-284">284</a></span>
+<span class="normal"><a href="#__codelineno-0-285">285</a></span>
+<span class="normal"><a href="#__codelineno-0-286">286</a></span>
+<span class="normal"><a href="#__codelineno-0-287">287</a></span>
+<span class="normal"><a href="#__codelineno-0-288">288</a></span>
+<span class="normal"><a href="#__codelineno-0-289">289</a></span>
+<span class="normal"><a href="#__codelineno-0-290">290</a></span>
+<span class="normal"><a href="#__codelineno-0-291">291</a></span>
+<span class="normal"><a href="#__codelineno-0-292">292</a></span>
+<span class="normal"><a href="#__codelineno-0-293">293</a></span>
+<span class="normal"><a href="#__codelineno-0-294">294</a></span>
+<span class="normal"><a href="#__codelineno-0-295">295</a></span>
+<span class="normal"><a href="#__codelineno-0-296">296</a></span>
+<span class="normal"><a href="#__codelineno-0-297">297</a></span>
+<span class="normal"><a href="#__codelineno-0-298">298</a></span>
+<span class="normal"><a href="#__codelineno-0-299">299</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18"></a><span class="k">class</span><span class="w"> </span><span class="nc">Client</span><span class="p">(</span><span class="n">host</span><span class="o">.</span><span class="n">_ClientPacketFactoryMixin</span><span class="p">,</span> <span class="n">_LegacyAttrMixin</span><span class="p">,</span> <span class="n">host</span><span class="o">.</span><span class="n">Host</span><span class="p">):</span>
 </span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Basic RADIUS client.</span>
 </span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20"></a><span class="sd">    This class implements a basic RADIUS client. It can send requests</span>
 </span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21"></a><span class="sd">    to a RADIUS server, taking care of timeouts and retries, and</span>
@@ -1849,21 +1871,43 @@ validate its replies.</p>
 </span><span id="__span-0-260"><a id="__codelineno-0-260" name="__codelineno-0-260"></a>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="n">packet</span><span class="o">.</span><span class="n">StatusPacket</span><span class="p">):</span>
 </span><span id="__span-0-261"><a id="__codelineno-0-261" name="__codelineno-0-261"></a>            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_status_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">)</span>
 </span><span id="__span-0-262"><a id="__codelineno-0-262" name="__codelineno-0-262"></a>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="n">packet</span><span class="o">.</span><span class="n">AuthPacket</span><span class="p">):</span>
-</span><span id="__span-0-263"><a id="__codelineno-0-263" name="__codelineno-0-263"></a>            <span class="k">if</span> <span class="n">pkt</span><span class="o">.</span><span class="n">auth_type</span> <span class="o">==</span> <span class="s2">&quot;eap-md5&quot;</span><span class="p">:</span>
-</span><span id="__span-0-264"><a id="__codelineno-0-264" name="__codelineno-0-264"></a>                <span class="n">eap</span><span class="o">.</span><span class="n">inject_eap_identity</span><span class="p">(</span><span class="n">pkt</span><span class="p">)</span>
-</span><span id="__span-0-265"><a id="__codelineno-0-265" name="__codelineno-0-265"></a>            <span class="n">reply</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">authport</span><span class="p">)</span>
-</span><span id="__span-0-266"><a id="__codelineno-0-266" name="__codelineno-0-266"></a>            <span class="k">if</span> <span class="p">(</span>
-</span><span id="__span-0-267"><a id="__codelineno-0-267" name="__codelineno-0-267"></a>                <span class="n">reply</span>
-</span><span id="__span-0-268"><a id="__codelineno-0-268" name="__codelineno-0-268"></a>                <span class="ow">and</span> <span class="n">reply</span><span class="o">.</span><span class="n">code</span> <span class="o">==</span> <span class="n">PacketType</span><span class="o">.</span><span class="n">AccessChallenge</span>
-</span><span id="__span-0-269"><a id="__codelineno-0-269" name="__codelineno-0-269"></a>                <span class="ow">and</span> <span class="n">pkt</span><span class="o">.</span><span class="n">auth_type</span> <span class="o">==</span> <span class="s2">&quot;eap-md5&quot;</span>
-</span><span id="__span-0-270"><a id="__codelineno-0-270" name="__codelineno-0-270"></a>            <span class="p">):</span>
-</span><span id="__span-0-271"><a id="__codelineno-0-271" name="__codelineno-0-271"></a>                <span class="n">eap</span><span class="o">.</span><span class="n">apply_eap_md5_challenge</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="n">reply</span><span class="p">)</span>
-</span><span id="__span-0-272"><a id="__codelineno-0-272" name="__codelineno-0-272"></a>                <span class="n">reply</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">authport</span><span class="p">)</span>
-</span><span id="__span-0-273"><a id="__codelineno-0-273" name="__codelineno-0-273"></a>            <span class="k">return</span> <span class="n">reply</span>
-</span><span id="__span-0-274"><a id="__codelineno-0-274" name="__codelineno-0-274"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="n">packet</span><span class="o">.</span><span class="n">CoAPacket</span><span class="p">):</span>
-</span><span id="__span-0-275"><a id="__codelineno-0-275" name="__codelineno-0-275"></a>            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coaport</span><span class="p">)</span>
-</span><span id="__span-0-276"><a id="__codelineno-0-276" name="__codelineno-0-276"></a>        <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-0-277"><a id="__codelineno-0-277" name="__codelineno-0-277"></a>            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">acctport</span><span class="p">)</span>
+</span><span id="__span-0-263"><a id="__codelineno-0-263" name="__codelineno-0-263"></a>            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_auth_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">)</span>
+</span><span id="__span-0-264"><a id="__codelineno-0-264" name="__codelineno-0-264"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="n">packet</span><span class="o">.</span><span class="n">CoAPacket</span><span class="p">):</span>
+</span><span id="__span-0-265"><a id="__codelineno-0-265" name="__codelineno-0-265"></a>            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coaport</span><span class="p">)</span>
+</span><span id="__span-0-266"><a id="__codelineno-0-266" name="__codelineno-0-266"></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-267"><a id="__codelineno-0-267" name="__codelineno-0-267"></a>            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">acctport</span><span class="p">)</span>
+</span><span id="__span-0-268"><a id="__codelineno-0-268" name="__codelineno-0-268"></a>
+</span><span id="__span-0-269"><a id="__codelineno-0-269" name="__codelineno-0-269"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_send_auth_packet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pkt</span><span class="p">:</span> <span class="n">packet</span><span class="o">.</span><span class="n">AuthPacket</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">packet</span><span class="o">.</span><span class="n">Packet</span><span class="p">:</span>
+</span><span id="__span-0-270"><a id="__codelineno-0-270" name="__codelineno-0-270"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Send an Access-Request, driving an EAP exchange if registered.</span>
+</span><span id="__span-0-271"><a id="__codelineno-0-271" name="__codelineno-0-271"></a>
+</span><span id="__span-0-272"><a id="__codelineno-0-272" name="__codelineno-0-272"></a><span class="sd">        When ``pkt.auth_type`` matches a method in the EAP registry the</span>
+</span><span id="__span-0-273"><a id="__codelineno-0-273" name="__codelineno-0-273"></a><span class="sd">        loop calls ``method.start`` once before the first send and</span>
+</span><span id="__span-0-274"><a id="__codelineno-0-274" name="__codelineno-0-274"></a><span class="sd">        ``method.respond`` after every ``Access-Challenge`` reply,</span>
+</span><span id="__span-0-275"><a id="__codelineno-0-275" name="__codelineno-0-275"></a><span class="sd">        continuing until the server returns ``Access-Accept`` /</span>
+</span><span id="__span-0-276"><a id="__codelineno-0-276" name="__codelineno-0-276"></a><span class="sd">        ``Access-Reject`` (or any non-Challenge code). For unregistered</span>
+</span><span id="__span-0-277"><a id="__codelineno-0-277" name="__codelineno-0-277"></a><span class="sd">        or missing ``auth_type`` values the request flows through as a</span>
+</span><span id="__span-0-278"><a id="__codelineno-0-278" name="__codelineno-0-278"></a><span class="sd">        single round-trip.</span>
+</span><span id="__span-0-279"><a id="__codelineno-0-279" name="__codelineno-0-279"></a>
+</span><span id="__span-0-280"><a id="__codelineno-0-280" name="__codelineno-0-280"></a><span class="sd">        The sync transport does not regenerate the Request Authenticator</span>
+</span><span id="__span-0-281"><a id="__codelineno-0-281" name="__codelineno-0-281"></a><span class="sd">        between rounds — ``Packet.request_packet`` only re-allocates one</span>
+</span><span id="__span-0-282"><a id="__codelineno-0-282" name="__codelineno-0-282"></a><span class="sd">        when ``self.authenticator`` is ``None`` — so the same value</span>
+</span><span id="__span-0-283"><a id="__codelineno-0-283" name="__codelineno-0-283"></a><span class="sd">        spans the full challenge sequence. This preserves the pre-3.1</span>
+</span><span id="__span-0-284"><a id="__codelineno-0-284" name="__codelineno-0-284"></a><span class="sd">        EAP-MD5 behaviour exactly; methods that need fresh</span>
+</span><span id="__span-0-285"><a id="__codelineno-0-285" name="__codelineno-0-285"></a><span class="sd">        authenticators per round (e.g. EAP-TLS over the sync client) can</span>
+</span><span id="__span-0-286"><a id="__codelineno-0-286" name="__codelineno-0-286"></a><span class="sd">        set ``pkt.authenticator = None`` from inside ``respond``.</span>
+</span><span id="__span-0-287"><a id="__codelineno-0-287" name="__codelineno-0-287"></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="__span-0-288"><a id="__codelineno-0-288" name="__codelineno-0-288"></a>        <span class="n">method</span> <span class="o">=</span> <span class="n">eap</span><span class="o">.</span><span class="n">get_method</span><span class="p">(</span><span class="n">pkt</span><span class="o">.</span><span class="n">auth_type</span><span class="p">)</span>
+</span><span id="__span-0-289"><a id="__codelineno-0-289" name="__codelineno-0-289"></a>        <span class="k">if</span> <span class="n">method</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-290"><a id="__codelineno-0-290" name="__codelineno-0-290"></a>            <span class="n">method</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="n">pkt</span><span class="p">)</span>
+</span><span id="__span-0-291"><a id="__codelineno-0-291" name="__codelineno-0-291"></a>        <span class="n">reply</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">authport</span><span class="p">)</span>
+</span><span id="__span-0-292"><a id="__codelineno-0-292" name="__codelineno-0-292"></a>        <span class="k">while</span> <span class="p">(</span>
+</span><span id="__span-0-293"><a id="__codelineno-0-293" name="__codelineno-0-293"></a>            <span class="n">method</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+</span><span id="__span-0-294"><a id="__codelineno-0-294" name="__codelineno-0-294"></a>            <span class="ow">and</span> <span class="n">reply</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+</span><span id="__span-0-295"><a id="__codelineno-0-295" name="__codelineno-0-295"></a>            <span class="ow">and</span> <span class="n">reply</span><span class="o">.</span><span class="n">code</span> <span class="o">==</span> <span class="n">PacketType</span><span class="o">.</span><span class="n">AccessChallenge</span>
+</span><span id="__span-0-296"><a id="__codelineno-0-296" name="__codelineno-0-296"></a>        <span class="p">):</span>
+</span><span id="__span-0-297"><a id="__codelineno-0-297" name="__codelineno-0-297"></a>            <span class="n">method</span><span class="o">.</span><span class="n">respond</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="n">reply</span><span class="p">)</span>
+</span><span id="__span-0-298"><a id="__codelineno-0-298" name="__codelineno-0-298"></a>            <span class="n">reply</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">authport</span><span class="p">)</span>
+</span><span id="__span-0-299"><a id="__codelineno-0-299" name="__codelineno-0-299"></a>        <span class="k">return</span> <span class="n">reply</span>
 </span></code></pre></div></td></tr></table></div>
               </details>
 
@@ -2412,17 +2456,7 @@ usefull when working on a machine with multiple addresses.</p>
 <span class="normal"><a href="#__codelineno-0-264">264</a></span>
 <span class="normal"><a href="#__codelineno-0-265">265</a></span>
 <span class="normal"><a href="#__codelineno-0-266">266</a></span>
-<span class="normal"><a href="#__codelineno-0-267">267</a></span>
-<span class="normal"><a href="#__codelineno-0-268">268</a></span>
-<span class="normal"><a href="#__codelineno-0-269">269</a></span>
-<span class="normal"><a href="#__codelineno-0-270">270</a></span>
-<span class="normal"><a href="#__codelineno-0-271">271</a></span>
-<span class="normal"><a href="#__codelineno-0-272">272</a></span>
-<span class="normal"><a href="#__codelineno-0-273">273</a></span>
-<span class="normal"><a href="#__codelineno-0-274">274</a></span>
-<span class="normal"><a href="#__codelineno-0-275">275</a></span>
-<span class="normal"><a href="#__codelineno-0-276">276</a></span>
-<span class="normal"><a href="#__codelineno-0-277">277</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-248"><a id="__codelineno-0-248" name="__codelineno-0-248"></a><span class="k">def</span><span class="w"> </span><span class="nf">send_packet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pkt</span><span class="p">:</span> <span class="n">packet</span><span class="o">.</span><span class="n">PacketImplementation</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">packet</span><span class="o">.</span><span class="n">Packet</span><span class="p">:</span>  <span class="c1"># type: ignore</span>
+<span class="normal"><a href="#__codelineno-0-267">267</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-248"><a id="__codelineno-0-248" name="__codelineno-0-248"></a><span class="k">def</span><span class="w"> </span><span class="nf">send_packet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pkt</span><span class="p">:</span> <span class="n">packet</span><span class="o">.</span><span class="n">PacketImplementation</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">packet</span><span class="o">.</span><span class="n">Packet</span><span class="p">:</span>  <span class="c1"># type: ignore</span>
 </span><span id="__span-0-249"><a id="__codelineno-0-249" name="__codelineno-0-249"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Send a packet to a RADIUS server.</span>
 </span><span id="__span-0-250"><a id="__codelineno-0-250" name="__codelineno-0-250"></a>
 </span><span id="__span-0-251"><a id="__codelineno-0-251" name="__codelineno-0-251"></a><span class="sd">    Args:</span>
@@ -2437,21 +2471,11 @@ usefull when working on a machine with multiple addresses.</p>
 </span><span id="__span-0-260"><a id="__codelineno-0-260" name="__codelineno-0-260"></a>    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="n">packet</span><span class="o">.</span><span class="n">StatusPacket</span><span class="p">):</span>
 </span><span id="__span-0-261"><a id="__codelineno-0-261" name="__codelineno-0-261"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_status_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">)</span>
 </span><span id="__span-0-262"><a id="__codelineno-0-262" name="__codelineno-0-262"></a>    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="n">packet</span><span class="o">.</span><span class="n">AuthPacket</span><span class="p">):</span>
-</span><span id="__span-0-263"><a id="__codelineno-0-263" name="__codelineno-0-263"></a>        <span class="k">if</span> <span class="n">pkt</span><span class="o">.</span><span class="n">auth_type</span> <span class="o">==</span> <span class="s2">&quot;eap-md5&quot;</span><span class="p">:</span>
-</span><span id="__span-0-264"><a id="__codelineno-0-264" name="__codelineno-0-264"></a>            <span class="n">eap</span><span class="o">.</span><span class="n">inject_eap_identity</span><span class="p">(</span><span class="n">pkt</span><span class="p">)</span>
-</span><span id="__span-0-265"><a id="__codelineno-0-265" name="__codelineno-0-265"></a>        <span class="n">reply</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">authport</span><span class="p">)</span>
-</span><span id="__span-0-266"><a id="__codelineno-0-266" name="__codelineno-0-266"></a>        <span class="k">if</span> <span class="p">(</span>
-</span><span id="__span-0-267"><a id="__codelineno-0-267" name="__codelineno-0-267"></a>            <span class="n">reply</span>
-</span><span id="__span-0-268"><a id="__codelineno-0-268" name="__codelineno-0-268"></a>            <span class="ow">and</span> <span class="n">reply</span><span class="o">.</span><span class="n">code</span> <span class="o">==</span> <span class="n">PacketType</span><span class="o">.</span><span class="n">AccessChallenge</span>
-</span><span id="__span-0-269"><a id="__codelineno-0-269" name="__codelineno-0-269"></a>            <span class="ow">and</span> <span class="n">pkt</span><span class="o">.</span><span class="n">auth_type</span> <span class="o">==</span> <span class="s2">&quot;eap-md5&quot;</span>
-</span><span id="__span-0-270"><a id="__codelineno-0-270" name="__codelineno-0-270"></a>        <span class="p">):</span>
-</span><span id="__span-0-271"><a id="__codelineno-0-271" name="__codelineno-0-271"></a>            <span class="n">eap</span><span class="o">.</span><span class="n">apply_eap_md5_challenge</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="n">reply</span><span class="p">)</span>
-</span><span id="__span-0-272"><a id="__codelineno-0-272" name="__codelineno-0-272"></a>            <span class="n">reply</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">authport</span><span class="p">)</span>
-</span><span id="__span-0-273"><a id="__codelineno-0-273" name="__codelineno-0-273"></a>        <span class="k">return</span> <span class="n">reply</span>
-</span><span id="__span-0-274"><a id="__codelineno-0-274" name="__codelineno-0-274"></a>    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="n">packet</span><span class="o">.</span><span class="n">CoAPacket</span><span class="p">):</span>
-</span><span id="__span-0-275"><a id="__codelineno-0-275" name="__codelineno-0-275"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coaport</span><span class="p">)</span>
-</span><span id="__span-0-276"><a id="__codelineno-0-276" name="__codelineno-0-276"></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-0-277"><a id="__codelineno-0-277" name="__codelineno-0-277"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">acctport</span><span class="p">)</span>
+</span><span id="__span-0-263"><a id="__codelineno-0-263" name="__codelineno-0-263"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_auth_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">)</span>
+</span><span id="__span-0-264"><a id="__codelineno-0-264" name="__codelineno-0-264"></a>    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="n">packet</span><span class="o">.</span><span class="n">CoAPacket</span><span class="p">):</span>
+</span><span id="__span-0-265"><a id="__codelineno-0-265" name="__codelineno-0-265"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coaport</span><span class="p">)</span>
+</span><span id="__span-0-266"><a id="__codelineno-0-266" name="__codelineno-0-266"></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-267"><a id="__codelineno-0-267" name="__codelineno-0-267"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">acctport</span><span class="p">)</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
