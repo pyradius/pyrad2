@@ -420,6 +420,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#retries-and-backoff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Retries and backoff
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#message-authenticator" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1312,6 +1323,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/retry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    retry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1372,6 +1411,17 @@
     <span class="md-ellipsis">
       
         Authentication methods
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#retries-and-backoff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Retries and backoff
       
     </span>
   </a>
@@ -1577,6 +1627,43 @@ EAP-MSCHAPv2 need an optional dependency — <code>pip install pyrad2[mschap]</c
 </span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="p">)</span>
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">reply</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">send_packet</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
 </span></code></pre></div>
+<p>Under the hood, the client looks up the method via <code>pyrad2.eap.get_method(pkt.auth_type)</code> and drives it through a transport-neutral challenge loop. Registering a new method is a one-call addition:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.eap</span><span class="w"> </span><span class="kn">import</span> <span class="n">EapMethod</span><span class="p">,</span> <span class="n">register_method</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">FooMethod</span><span class="p">(</span><span class="n">EapMethod</span><span class="p">):</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pkt</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">respond</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pkt</span><span class="p">,</span> <span class="n">challenge</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">register_method</span><span class="p">(</span><span class="s2">&quot;eap-foo&quot;</span><span class="p">,</span> <span class="n">FooMethod</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Callers then set <code>req.auth_type = "eap-foo"</code> and the existing client loop drives <code>start</code> before the first send and <code>respond</code> after every <code>Access-Challenge</code> until the server returns <code>Access-Accept</code> / <code>Access-Reject</code>.</p>
+<h2 id="retries-and-backoff">Retries and backoff</h2>
+<p><code>Client</code> and <code>ClientAsync</code> share a <code>RetryPolicy</code> (<code>pyrad2.retry.RetryPolicy</code>) covering how many retransmissions to attempt, the base wait, exponential backoff, jitter, and a hard cap. The legacy <code>retries=</code> / <code>timeout=</code> kwargs still work — they build a flat-schedule policy under the hood:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">ClientAsync</span><span class="p">(</span><span class="n">server</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1"># equivalent to:</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">ClientAsync</span><span class="p">(</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">server</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">,</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">retry_policy</span><span class="o">=</span><span class="n">RetryPolicy</span><span class="p">(</span><span class="n">retries</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">),</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>For backoff or jitter, pass an explicit <code>retry_policy</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.retry</span><span class="w"> </span><span class="kn">import</span> <span class="n">RetryPolicy</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.client_async</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClientAsync</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">client</span> <span class="o">=</span> <span class="n">ClientAsync</span><span class="p">(</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">server</span><span class="o">=</span><span class="s2">&quot;radius.example.com&quot;</span><span class="p">,</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">secret</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;...&quot;</span><span class="p">,</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="nb">dict</span><span class="o">=</span><span class="n">dictionary</span><span class="p">,</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">retry_policy</span><span class="o">=</span><span class="n">RetryPolicy</span><span class="p">(</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>        <span class="n">retries</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>        <span class="n">timeout</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>        <span class="n">backoff</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>    <span class="c1"># 2s, 4s, 8s, 16s</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>        <span class="n">jitter</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>     <span class="c1"># ±10% noise per wait — avoids lockstep retries</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>        <span class="n">max_wait</span><span class="o">=</span><span class="mf">30.0</span><span class="p">,</span>  <span class="c1"># cap any single wait at 30s</span>
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>    <span class="p">),</span>
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>The async timeout handler consults <code>wait_for(attempt)</code> per pending request, so backoff applies to each retry independently. On the sync side, <code>Acct-Delay-Time</code> is bumped by the <em>actual</em> wait of the previous attempt (not the base timeout), so accounting requests stay correct under backoff.</p>
 <h2 id="message-authenticator">Message-Authenticator</h2>
 <p>By default (<code>enforce_ma=True</code>) pyrad2 stamps <code>Message-Authenticator</code> onto every outgoing <code>Access-Request</code> and refuses any <code>Access-Accept</code> / <code>Reject</code> / <code>Challenge</code> reply that doesn't carry one. This mitigates <a href="https://www.blastradius.fail/">BlastRADIUS (CVE-2024-3596)</a> without any extra wiring on your side.</p>
 <p>Scope of the default:</p>
@@ -1587,31 +1674,31 @@ EAP-MSCHAPv2 need an optional dependency — <code>pip install pyrad2[mschap]</c
 <li>If you build an <code>Access-Request</code> with <code>EAP-Message</code>, <code>Message-Authenticator</code> is added automatically — same as before.</li>
 </ul>
 <p>If you're talking to a legacy server that can't process the attribute, opt out explicitly:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">client</span> <span class="o">=</span> <span class="n">ClientAsync</span><span class="p">(</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">server</span><span class="o">=</span><span class="s2">&quot;localhost&quot;</span><span class="p">,</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">secret</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;...&quot;</span><span class="p">,</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="nb">dict</span><span class="o">=</span><span class="n">Dictionary</span><span class="p">(</span><span class="s2">&quot;dictionary&quot;</span><span class="p">),</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">enforce_ma</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># legacy peer; drops BlastRADIUS mitigation</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">client</span> <span class="o">=</span> <span class="n">ClientAsync</span><span class="p">(</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">server</span><span class="o">=</span><span class="s2">&quot;localhost&quot;</span><span class="p">,</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">secret</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;...&quot;</span><span class="p">,</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="nb">dict</span><span class="o">=</span><span class="n">Dictionary</span><span class="p">(</span><span class="s2">&quot;dictionary&quot;</span><span class="p">),</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">enforce_ma</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># legacy peer; drops BlastRADIUS mitigation</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="status-server-health-checks">Status-Server health checks</h2>
 <p><a href="https://datatracker.ietf.org/doc/html/rfc5997">RFC 5997</a> Status-Server is the canonical "is this RADIUS server alive?" probe. pyrad2 adds the mandatory <code>Message-Authenticator</code> automatically.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Async</label><label for="__tabbed_1_2">Sync</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.client_async</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClientAsync</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">client</span> <span class="o">=</span> <span class="n">ClientAsync</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">req</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create_status_packet</span><span class="p">()</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">reply</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">send_status_packet</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">&quot;auth&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.client_async</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClientAsync</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">client</span> <span class="o">=</span> <span class="n">ClientAsync</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">req</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create_status_packet</span><span class="p">()</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">reply</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">send_status_packet</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">&quot;auth&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">req</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create_status_packet</span><span class="p">()</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">reply</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">send_status_packet</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">&quot;auth&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">req</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create_status_packet</span><span class="p">()</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="n">reply</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">send_status_packet</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">&quot;auth&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 </div>
 </div>
@@ -1635,7 +1722,7 @@ EAP-MSCHAPv2 need an optional dependency — <code>pip install pyrad2[mschap]</c
 </tbody>
 </table>
 <p>For a RadSec server, use the dedicated TLS health-check example:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>examples/status_radsec.py
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>examples/status_radsec.py
 </span></code></pre></div>
 <p>The UDP <code>examples/status.py</code> script can't reach a RadSec server - they're on different ports and transports.</p>
 <h2 id="radsec">RadSec</h2>
@@ -1646,17 +1733,17 @@ EAP-MSCHAPv2 need an optional dependency — <code>pip install pyrad2[mschap]</c
 <p>RadSec replaces UDP+MD5 with TLS/TCP on port 2083. Auth, accounting, and dynamic authorization all share one mutually-authenticated connection. The default shared secret per the RFC is <code>radsec</code>.</p>
 <p>For server-side details and a discussion of what the RFC actually changes, see <a href="../server/#radsec-radius-over-tls">RadSec in the server docs</a>.</p>
 <h3 id="creating-a-radsec-client">Creating a RadSec client</h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.radsec.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">RadSecClient</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.dictionary</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dictionary</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">client</span> <span class="o">=</span> <span class="n">RadSecClient</span><span class="p">(</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">server</span><span class="o">=</span><span class="s2">&quot;127.0.0.1&quot;</span><span class="p">,</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">secret</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;radsec&quot;</span><span class="p">,</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="nb">dict</span><span class="o">=</span><span class="n">Dictionary</span><span class="p">(</span><span class="s2">&quot;dictionary&quot;</span><span class="p">),</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="n">certfile</span><span class="o">=</span><span class="s2">&quot;certs/client/client.cert.pem&quot;</span><span class="p">,</span>
-</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="n">keyfile</span><span class="o">=</span><span class="s2">&quot;certs/client/client.key.pem&quot;</span><span class="p">,</span>
-</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>    <span class="n">certfile_server</span><span class="o">=</span><span class="s2">&quot;certs/ca/ca.cert.pem&quot;</span><span class="p">,</span>
-</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.radsec.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">RadSecClient</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.dictionary</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dictionary</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="n">client</span> <span class="o">=</span> <span class="n">RadSecClient</span><span class="p">(</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="n">server</span><span class="o">=</span><span class="s2">&quot;127.0.0.1&quot;</span><span class="p">,</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="n">secret</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;radsec&quot;</span><span class="p">,</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>    <span class="nb">dict</span><span class="o">=</span><span class="n">Dictionary</span><span class="p">(</span><span class="s2">&quot;dictionary&quot;</span><span class="p">),</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>    <span class="n">certfile</span><span class="o">=</span><span class="s2">&quot;certs/client/client.cert.pem&quot;</span><span class="p">,</span>
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>    <span class="n">keyfile</span><span class="o">=</span><span class="s2">&quot;certs/client/client.key.pem&quot;</span><span class="p">,</span>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>    <span class="n">certfile_server</span><span class="o">=</span><span class="s2">&quot;certs/ca/ca.cert.pem&quot;</span><span class="p">,</span>
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>A runnable example is in <a href="https://github.com/pyradius/pyrad2/blob/master/examples/auth_radsec.py"><code>examples/auth_radsec.py</code></a>.</p>
 <h2 id="radius11-rfc-9765">RADIUS/1.1 (RFC 9765)</h2>
@@ -1665,24 +1752,24 @@ EAP-MSCHAPv2 need an optional dependency — <code>pip install pyrad2[mschap]</c
 <p>Experimental. See <a href="../server/#radius11-rfc-9765">the server docs</a> for a full description of what v1.1 changes.</p>
 </div>
 <p><code>RadSecClient</code> accepts the same <code>radius_versions=...</code> kwarg as the server. The default <code>(V1_0,)</code> advertises no ALPN string at all - handshakes are byte-identical to historic RadSec. Pass <code>(V1_0, V1_1)</code> to offer both; the server picks the highest mutually supported version.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.radsec.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">RadSecClient</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.radsec.v11</span><span class="w"> </span><span class="kn">import</span> <span class="n">RadiusVersion</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">client</span> <span class="o">=</span> <span class="n">RadSecClient</span><span class="p">(</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">server</span><span class="o">=</span><span class="s2">&quot;127.0.0.1&quot;</span><span class="p">,</span>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="n">secret</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;radsec&quot;</span><span class="p">,</span>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="nb">dict</span><span class="o">=</span><span class="n">Dictionary</span><span class="p">(</span><span class="s2">&quot;dictionary&quot;</span><span class="p">),</span>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>    <span class="n">certfile</span><span class="o">=</span><span class="s2">&quot;certs/client/client.cert.pem&quot;</span><span class="p">,</span>
-</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>    <span class="n">keyfile</span><span class="o">=</span><span class="s2">&quot;certs/client/client.key.pem&quot;</span><span class="p">,</span>
-</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>    <span class="n">certfile_server</span><span class="o">=</span><span class="s2">&quot;certs/ca/ca.cert.pem&quot;</span><span class="p">,</span>
-</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>    <span class="n">radius_versions</span><span class="o">=</span><span class="p">(</span><span class="n">RadiusVersion</span><span class="o">.</span><span class="n">V1_0</span><span class="p">,</span> <span class="n">RadiusVersion</span><span class="o">.</span><span class="n">V1_1</span><span class="p">),</span>
-</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="p">)</span>
-</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>
-</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="n">req</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create_auth_packet</span><span class="p">(</span><span class="n">User_Name</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">)</span>
-</span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="n">req</span><span class="o">.</span><span class="n">set_obfuscated</span><span class="p">(</span><span class="s2">&quot;User-Password&quot;</span><span class="p">,</span> <span class="s2">&quot;hunter2&quot;</span><span class="p">)</span>
-</span><span id="__span-8-16"><a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="n">reply</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">send_packet</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
-</span><span id="__span-8-17"><a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>
-</span><span id="__span-8-18"><a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a><span class="nb">print</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="n">_negotiated_version</span><span class="p">)</span>  <span class="c1"># RadiusVersion.V1_1 if both sides agreed</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.radsec.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">RadSecClient</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.radsec.v11</span><span class="w"> </span><span class="kn">import</span> <span class="n">RadiusVersion</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="n">client</span> <span class="o">=</span> <span class="n">RadSecClient</span><span class="p">(</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="n">server</span><span class="o">=</span><span class="s2">&quot;127.0.0.1&quot;</span><span class="p">,</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="n">secret</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;radsec&quot;</span><span class="p">,</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>    <span class="nb">dict</span><span class="o">=</span><span class="n">Dictionary</span><span class="p">(</span><span class="s2">&quot;dictionary&quot;</span><span class="p">),</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>    <span class="n">certfile</span><span class="o">=</span><span class="s2">&quot;certs/client/client.cert.pem&quot;</span><span class="p">,</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>    <span class="n">keyfile</span><span class="o">=</span><span class="s2">&quot;certs/client/client.key.pem&quot;</span><span class="p">,</span>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>    <span class="n">certfile_server</span><span class="o">=</span><span class="s2">&quot;certs/ca/ca.cert.pem&quot;</span><span class="p">,</span>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>    <span class="n">radius_versions</span><span class="o">=</span><span class="p">(</span><span class="n">RadiusVersion</span><span class="o">.</span><span class="n">V1_0</span><span class="p">,</span> <span class="n">RadiusVersion</span><span class="o">.</span><span class="n">V1_1</span><span class="p">),</span>
+</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="p">)</span>
+</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>
+</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="n">req</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create_auth_packet</span><span class="p">(</span><span class="n">User_Name</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">)</span>
+</span><span id="__span-11-15"><a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="n">req</span><span class="o">.</span><span class="n">set_obfuscated</span><span class="p">(</span><span class="s2">&quot;User-Password&quot;</span><span class="p">,</span> <span class="s2">&quot;hunter2&quot;</span><span class="p">)</span>
+</span><span id="__span-11-16"><a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a><span class="n">reply</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">send_packet</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+</span><span id="__span-11-17"><a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a>
+</span><span id="__span-11-18"><a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a><span class="nb">print</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="n">_negotiated_version</span><span class="p">)</span>  <span class="c1"># RadiusVersion.V1_1 if both sides agreed</span>
 </span></code></pre></div>
 <h3 id="why-set_obfuscated">Why <code>set_obfuscated</code>?</h3>
 <p>A client that advertises <em>both</em> v1.0 and v1.1 doesn't know which one will be negotiated until the TLS handshake completes. But attribute assignment happens <strong>before</strong> that. <code>set_obfuscated</code> defers the encoding decision until send time:</p>
@@ -1741,15 +1828,15 @@ EAP-MSCHAPv2 need an optional dependency — <code>pip install pyrad2[mschap]</c
 <h3 id="tls-version">TLS version</h3>
 <p><code>RadSecClient</code> defaults <code>minimum_tls_version</code> to <strong>TLS 1.3</strong> (<a href="https://datatracker.ietf.org/doc/html/rfc9325">RFC 9325</a> treats 1.2 as legacy; <a href="https://datatracker.ietf.org/doc/html/rfc9750">RFC 9750</a> mandates 1.3 for RADIUS/1.1).</p>
 <p>To bridge a legacy server that can't yet negotiate 1.3, pin the floor at 1.2 explicitly:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">ssl</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.radsec.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">RadSecClient</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="n">client</span> <span class="o">=</span> <span class="n">RadSecClient</span><span class="p">(</span>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="n">server</span><span class="o">=</span><span class="s2">&quot;legacy.example.com&quot;</span><span class="p">,</span>
-</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="n">secret</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;radsec&quot;</span><span class="p">,</span>
-</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>    <span class="nb">dict</span><span class="o">=</span><span class="n">dictionary</span><span class="p">,</span>
-</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>    <span class="n">minimum_tls_version</span><span class="o">=</span><span class="n">ssl</span><span class="o">.</span><span class="n">TLSVersion</span><span class="o">.</span><span class="n">TLSv1_2</span><span class="p">,</span>  <span class="c1"># legacy peer</span>
-</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">ssl</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.radsec.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">RadSecClient</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="n">client</span> <span class="o">=</span> <span class="n">RadSecClient</span><span class="p">(</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">server</span><span class="o">=</span><span class="s2">&quot;legacy.example.com&quot;</span><span class="p">,</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="n">secret</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;radsec&quot;</span><span class="p">,</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>    <span class="nb">dict</span><span class="o">=</span><span class="n">dictionary</span><span class="p">,</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>    <span class="n">minimum_tls_version</span><span class="o">=</span><span class="n">ssl</span><span class="o">.</span><span class="n">TLSVersion</span><span class="o">.</span><span class="n">TLSv1_2</span><span class="p">,</span>  <span class="c1"># legacy peer</span>
+</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>If <code>radius_versions</code> includes <code>V1_1</code>, the floor is auto-promoted to 1.3 regardless of what you pass (RFC 9750 §3.4).</p>
 

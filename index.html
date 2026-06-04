@@ -1210,6 +1210,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/retry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    retry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1332,6 +1360,18 @@
 <p><strong>Coming from <code>pyrad</code>?</strong> &nbsp;→ <a href="compatibility/">Compatibility</a></p>
 <p>What changed in the fork and what you need to update.</p>
 </li>
+</ul>
+</div>
+<div class="admonition note">
+<p class="admonition-title">What's new in 3.1</p>
+<ul>
+<li><strong>FreeRADIUS conformance suite</strong> — 281 vendor/RFC/internal dictionaries plus all 41 of FreeRADIUS v4's <code>decode-proto</code> packet vectors regression-tested against upstream. See <a href="conformance/">FreeRADIUS Conformance</a>.</li>
+<li><strong>Shared <code>RetryPolicy</code></strong> with exponential backoff, jitter, and per-attempt waits — works on both sync <code>Client</code> and <code>ClientAsync</code>. The legacy <code>retries=</code> / <code>timeout=</code> kwargs continue to behave identically. See <a href="client/#retries-and-backoff">Retries and backoff</a>.</li>
+<li><strong><code>EapMethod</code> ABC + registry.</strong> <code>pyrad2.eap</code> is now a package; the sync, async, and RadSec clients share one method-agnostic challenge loop. Adding a new method is a <code>register_method("eap-foo", FooMethod)</code> call.</li>
+<li><strong><code>ipv4prefix</code> codec</strong> (RFC 5090) — full encode/decode wired into <code>encode_attr</code> / <code>decode_attr</code>.</li>
+<li><strong>PEP 561 typing</strong> — <code>py.typed</code> ships in the wheel.</li>
+<li><strong>Proxy fix + <code>make scenario_proxy</code></strong> demo wiring a downstream client through a <code>Proxy</code> to an upstream <code>Server</code> in one process.</li>
+<li>Full release notes in <a href="https://github.com/pyradius/pyrad2/blob/master/CHANGELOG.md">CHANGELOG.md</a>.</li>
 </ul>
 </div>
 <h2 id="whats-in-the-box">What's in the box</h2>
