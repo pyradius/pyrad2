@@ -1333,10 +1333,7 @@ handle communication with other RADIUS servers as well.</p>
 <span class="normal"><a href="#__codelineno-0-81">81</a></span>
 <span class="normal"><a href="#__codelineno-0-82">82</a></span>
 <span class="normal"><a href="#__codelineno-0-83">83</a></span>
-<span class="normal"><a href="#__codelineno-0-84">84</a></span>
-<span class="normal"><a href="#__codelineno-0-85">85</a></span>
-<span class="normal"><a href="#__codelineno-0-86">86</a></span>
-<span class="normal"><a href="#__codelineno-0-87">87</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20"></a><span class="k">class</span><span class="w"> </span><span class="nc">Proxy</span><span class="p">(</span><span class="n">Server</span><span class="p">):</span>
+<span class="normal"><a href="#__codelineno-0-84">84</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20"></a><span class="k">class</span><span class="w"> </span><span class="nc">Proxy</span><span class="p">(</span><span class="n">Server</span><span class="p">):</span>
 </span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for RADIUS proxies.</span>
 </span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22"></a><span class="sd">    This class extends tha RADIUS server class with the capability to</span>
 </span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23"></a><span class="sd">    handle communication with other RADIUS servers as well.</span>
@@ -1391,19 +1388,16 @@ handle communication with other RADIUS servers as well.</p>
 </span><span id="__span-0-72"><a id="__codelineno-0-72" name="__codelineno-0-72"></a><span class="sd">            fd (socket.socket): socket to read packet from</span>
 </span><span id="__span-0-73"><a id="__codelineno-0-73" name="__codelineno-0-73"></a><span class="sd">        &quot;&quot;&quot;</span>
 </span><span id="__span-0-74"><a id="__codelineno-0-74" name="__codelineno-0-74"></a>        <span class="k">if</span> <span class="n">fd</span><span class="o">.</span><span class="n">fileno</span><span class="p">()</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_proxyfd</span><span class="o">.</span><span class="n">fileno</span><span class="p">():</span>
-</span><span id="__span-0-75"><a id="__codelineno-0-75" name="__codelineno-0-75"></a>            <span class="c1"># FIXME: ``Server._grab_packet`` lost its ``pktgen`` parameter</span>
-</span><span id="__span-0-76"><a id="__codelineno-0-76" name="__codelineno-0-76"></a>            <span class="c1"># in the M1 router refactor — proxy needs its own grab method</span>
-</span><span id="__span-0-77"><a id="__codelineno-0-77" name="__codelineno-0-77"></a>            <span class="c1"># because the reply-side parse runs without a known host secret.</span>
-</span><span id="__span-0-78"><a id="__codelineno-0-78" name="__codelineno-0-78"></a>            <span class="c1"># See review item L1 / proxy.py. Type-ignored to keep mypy</span>
-</span><span id="__span-0-79"><a id="__codelineno-0-79" name="__codelineno-0-79"></a>            <span class="c1"># green; this code path is exercised only via the proxy demo</span>
-</span><span id="__span-0-80"><a id="__codelineno-0-80" name="__codelineno-0-80"></a>            <span class="c1"># which doesn&#39;t run in CI.</span>
-</span><span id="__span-0-81"><a id="__codelineno-0-81" name="__codelineno-0-81"></a>            <span class="n">pkt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_grab_packet</span><span class="p">(</span>  <span class="c1"># type: ignore[call-arg]</span>
-</span><span id="__span-0-82"><a id="__codelineno-0-82" name="__codelineno-0-82"></a>                <span class="k">lambda</span> <span class="n">data</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="bp">self</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">create_packet</span><span class="p">(</span><span class="n">packet</span><span class="o">=</span><span class="n">data</span><span class="p">),</span>  <span class="c1"># type: ignore[arg-type]</span>
-</span><span id="__span-0-83"><a id="__codelineno-0-83" name="__codelineno-0-83"></a>                <span class="n">fd</span><span class="p">,</span>
-</span><span id="__span-0-84"><a id="__codelineno-0-84" name="__codelineno-0-84"></a>            <span class="p">)</span>
-</span><span id="__span-0-85"><a id="__codelineno-0-85" name="__codelineno-0-85"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_handle_proxy_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">)</span>
-</span><span id="__span-0-86"><a id="__codelineno-0-86" name="__codelineno-0-86"></a>        <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-0-87"><a id="__codelineno-0-87" name="__codelineno-0-87"></a>            <span class="n">Server</span><span class="o">.</span><span class="n">_process_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fd</span><span class="p">)</span>
+</span><span id="__span-0-75"><a id="__codelineno-0-75" name="__codelineno-0-75"></a>            <span class="c1"># ``Server._grab_packet`` parses with the secret looked up</span>
+</span><span id="__span-0-76"><a id="__codelineno-0-76" name="__codelineno-0-76"></a>            <span class="c1"># from ``self.hosts`` — for replies on the proxy socket the</span>
+</span><span id="__span-0-77"><a id="__codelineno-0-77" name="__codelineno-0-77"></a>            <span class="c1"># source is an upstream RADIUS server, which the operator</span>
+</span><span id="__span-0-78"><a id="__codelineno-0-78" name="__codelineno-0-78"></a>            <span class="c1"># must register in ``hosts`` the same way downstream NASes</span>
+</span><span id="__span-0-79"><a id="__codelineno-0-79" name="__codelineno-0-79"></a>            <span class="c1"># are. ``parse_packet`` dispatches the right Packet subclass</span>
+</span><span id="__span-0-80"><a id="__codelineno-0-80" name="__codelineno-0-80"></a>            <span class="c1"># by code (AccessAccept / AccountingResponse / …).</span>
+</span><span id="__span-0-81"><a id="__codelineno-0-81" name="__codelineno-0-81"></a>            <span class="n">pkt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_grab_packet</span><span class="p">(</span><span class="n">fd</span><span class="p">)</span>
+</span><span id="__span-0-82"><a id="__codelineno-0-82" name="__codelineno-0-82"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_handle_proxy_packet</span><span class="p">(</span><span class="n">pkt</span><span class="p">)</span>
+</span><span id="__span-0-83"><a id="__codelineno-0-83" name="__codelineno-0-83"></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-84"><a id="__codelineno-0-84" name="__codelineno-0-84"></a>            <span class="n">Server</span><span class="o">.</span><span class="n">_process_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fd</span><span class="p">)</span>
 </span></code></pre></div></td></tr></table></div>
               </details>
 
