@@ -12,7 +12,7 @@
         <link rel="prev" href="../server/">
       
       
-        <link rel="next" href="../dictionary/">
+        <link rel="next" href="../auth/">
       
       
         
@@ -409,10 +409,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#eap-md5" class="md-nav__link">
+  <a href="#authentication-methods" class="md-nav__link">
     <span class="md-ellipsis">
       
-        EAP-MD5
+        Authentication methods
       
     </span>
   </a>
@@ -523,6 +523,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication Methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1228,6 +1256,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/chap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    chap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/mschap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mschap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1284,10 +1368,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#eap-md5" class="md-nav__link">
+  <a href="#authentication-methods" class="md-nav__link">
     <span class="md-ellipsis">
       
-        EAP-MD5
+        Authentication methods
       
     </span>
   </a>
@@ -1479,8 +1563,13 @@
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">req</span><span class="p">[</span><span class="s2">&quot;Framed-IP-Address&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10.0.0.100&quot;</span>
 </span></code></pre></div>
 <p>A list of standard RADIUS attributes lives in <a href="https://datatracker.ietf.org/doc/html/rfc2865#section-5">RFC 2865 §5</a>. Vendor-specific attributes come from your vendor dictionary.</p>
-<h2 id="eap-md5">EAP-MD5</h2>
-<p>Both sync and async clients handle the EAP-MD5 challenge round-trip transparently. Pass <code>auth_type="eap-md5"</code> along with <code>User-Password</code>; the client injects an EAP-Identity, processes the server's <code>Access-Challenge</code> (computing the MD5 response, copying the <code>State</code>), and surfaces only the final <code>Access-Accept</code> / <code>Access-Reject</code>.</p>
+<h2 id="authentication-methods">Authentication methods</h2>
+<p>PAP (cleartext <code>User-Password</code>) is the default. For CHAP, EAP-MD5,
+EAP-GTC, MS-CHAPv2, and EAP-MSCHAPv2, see the dedicated
+<a href="../auth/">Authentication Methods</a> page. The shortest version: set
+<code>req.auth_type = "eap-md5"</code> (or <code>"eap-gtc"</code>, <code>"eap-mschapv2"</code>) and the
+client loop drives the challenge exchange automatically. MS-CHAPv2 /
+EAP-MSCHAPv2 need an optional dependency — <code>pip install pyrad2[mschap]</code>.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">req</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create_auth_packet</span><span class="p">(</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">User_Name</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">,</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">User_Password</span><span class="o">=</span><span class="s2">&quot;hunter2&quot;</span><span class="p">,</span>

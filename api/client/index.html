@@ -355,6 +355,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication Methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../dictionary/" class="md-nav__link">
         
   
@@ -1167,6 +1195,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    chap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mschap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mschap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1796,8 +1880,8 @@ validate its replies.</p>
 </span><span id="__span-0-185"><a id="__codelineno-0-185" name="__codelineno-0-185"></a>            <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">retry_policy</span><span class="o">.</span><span class="n">retries</span><span class="p">):</span>
 </span><span id="__span-0-186"><a id="__codelineno-0-186" name="__codelineno-0-186"></a>                <span class="k">if</span> <span class="n">attempt</span> <span class="ow">and</span> <span class="n">is_acct</span><span class="p">:</span>
 </span><span id="__span-0-187"><a id="__codelineno-0-187" name="__codelineno-0-187"></a>                    <span class="k">if</span> <span class="s2">&quot;Acct-Delay-Time&quot;</span> <span class="ow">in</span> <span class="n">pkt</span><span class="p">:</span>
-</span><span id="__span-0-188"><a id="__codelineno-0-188" name="__codelineno-0-188"></a>                        <span class="n">pkt</span><span class="p">[</span><span class="s2">&quot;Acct-Delay-Time&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="__span-0-189"><a id="__codelineno-0-189" name="__codelineno-0-189"></a>                            <span class="n">pkt</span><span class="p">[</span><span class="s2">&quot;Acct-Delay-Time&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">previous_wait</span><span class="p">)</span>
+</span><span id="__span-0-188"><a id="__codelineno-0-188" name="__codelineno-0-188"></a>                        <span class="n">pkt</span><span class="p">[</span><span class="s2">&quot;Acct-Delay-Time&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pkt</span><span class="p">[</span><span class="s2">&quot;Acct-Delay-Time&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span>
+</span><span id="__span-0-189"><a id="__codelineno-0-189" name="__codelineno-0-189"></a>                            <span class="n">previous_wait</span>
 </span><span id="__span-0-190"><a id="__codelineno-0-190" name="__codelineno-0-190"></a>                        <span class="p">)</span>
 </span><span id="__span-0-191"><a id="__codelineno-0-191" name="__codelineno-0-191"></a>                    <span class="k">else</span><span class="p">:</span>
 </span><span id="__span-0-192"><a id="__codelineno-0-192" name="__codelineno-0-192"></a>                        <span class="n">pkt</span><span class="p">[</span><span class="s2">&quot;Acct-Delay-Time&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">previous_wait</span><span class="p">)</span>

@@ -291,6 +291,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="1. Install">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#optional-ms-chapv2-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optional: MS-CHAPv2 support
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -437,6 +454,34 @@
     
   
     Making RADIUS Requests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication Methods
   
 
     
@@ -1150,6 +1195,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/chap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    chap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/mschap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mschap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1191,6 +1292,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="1. Install">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#optional-ms-chapv2-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optional: MS-CHAPv2 support
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1271,6 +1389,29 @@
 </div>
 </div>
 <p>pyrad2 requires Python <strong>3.12 or newer</strong>.</p>
+<h3 id="optional-ms-chapv2-support">Optional: MS-CHAPv2 support</h3>
+<p>MS-CHAPv2 and EAP-MSCHAPv2 (RFC 2759) need a DES primitive that modern
+Python stacks no longer expose. If you plan to use either method,
+install with the <code>[mschap]</code> extra:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">pip</label><label for="__tabbed_2_2">uv</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;pyrad2[mschap]&quot;</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>add<span class="w"> </span><span class="s2">&quot;pyrad2[mschap]&quot;</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<p>This pulls in the <a href="https://cryptography.io"><code>cryptography</code></a> package
+(~3 MB on install). MD4 (the other primitive MS-CHAPv2 needs) is
+bundled inside pyrad2 — no separate dependency. Every other
+authentication method pyrad2 ships (PAP, CHAP, EAP-MD5, EAP-GTC) works
+with the base install.</p>
+<p>See <a href="../auth/">Authentication Methods</a> for the full method matrix and
+client snippets.</p>
 <h2 id="2-radius-in-one-minute">2. RADIUS in one minute</h2>
 <p>If you've never worked with RADIUS, here's what you need to know before reading another line.</p>
 <ul>
@@ -1289,28 +1430,28 @@
 <p>That's it. The rest is detail.</p>
 <h2 id="3-see-a-real-exchange">3. See a real exchange</h2>
 <p>The fastest way to understand pyrad2 is to watch a complete exchange in one terminal. The repo ships <strong>scenarios</strong> - single-process scripts that run a server <em>and</em> a client in one event loop and exit.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>make<span class="w"> </span>scenario_auth<span class="w">     </span><span class="c1"># Access-Request -&gt; Access-Accept (RFC 2865)</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>make<span class="w"> </span>scenario_acct<span class="w">     </span><span class="c1"># Accounting-Request -&gt; Accounting-Response</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>make<span class="w"> </span>scenario_coa<span class="w">      </span><span class="c1"># CoA-Request -&gt; CoA-ACK (RFC 5176)</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>make<span class="w"> </span>scenario_status<span class="w">   </span><span class="c1"># Status-Server health check (RFC 5997)</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>make<span class="w"> </span>scenario_dedup<span class="w">    </span><span class="c1"># Duplicate detection (RFC 5080)</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>make<span class="w"> </span>scenario_radsec<span class="w">   </span><span class="c1"># RadSec over mutual TLS (RFC 6614)</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>make<span class="w"> </span>demo<span class="w">              </span><span class="c1"># all of the above, in sequence</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>make<span class="w"> </span>scenario_auth<span class="w">     </span><span class="c1"># Access-Request -&gt; Access-Accept (RFC 2865)</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>make<span class="w"> </span>scenario_acct<span class="w">     </span><span class="c1"># Accounting-Request -&gt; Accounting-Response</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>make<span class="w"> </span>scenario_coa<span class="w">      </span><span class="c1"># CoA-Request -&gt; CoA-ACK (RFC 5176)</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>make<span class="w"> </span>scenario_status<span class="w">   </span><span class="c1"># Status-Server health check (RFC 5997)</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>make<span class="w"> </span>scenario_dedup<span class="w">    </span><span class="c1"># Duplicate detection (RFC 5080)</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>make<span class="w"> </span>scenario_radsec<span class="w">   </span><span class="c1"># RadSec over mutual TLS (RFC 6614)</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>make<span class="w"> </span>demo<span class="w">              </span><span class="c1"># all of the above, in sequence</span>
 </span></code></pre></div>
 <p>To <strong>watch the actual bytes</strong> on the wire, set <code>PYRAD2_TRACE=1</code> <strong>and</strong> <code>PYRAD2_TRACE_UNSAFE=1</code>:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">PYRAD2_TRACE</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="nv">PYRAD2_TRACE_UNSAFE</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>make<span class="w"> </span>scenario_auth
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">PYRAD2_TRACE</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="nv">PYRAD2_TRACE_UNSAFE</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>make<span class="w"> </span>scenario_auth
 </span></code></pre></div>
 <p>Every packet is dumped with direction (<code>→</code> outgoing, <code>←</code> incoming), code, id, length, authenticator, decoded attributes, and a hex view of the raw bytes:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>[pyrad2 trace] → AccessRequest id=5 len=39
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    authenticator: de0f04abde127b093c5e456b9f51ed81
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    attributes:
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>      User-Name: [&#39;alice&#39;]
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>      NAS-IP-Address: [&#39;192.168.1.10&#39;]
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>      Service-Type: [&#39;Login-User&#39;]
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    raw:
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>        0000  01 05 00 27 de 0f 04 ab de 12 7b 09 3c 5e 45 6b  ...&#39;......{.&lt;^Ek
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>        0010  9f 51 ed 81 01 07 61 6c 69 63 65 04 06 c0 a8 01  .Q....alice.....
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>        0020  0a 06 06 00 00 00 01                             .......
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>[pyrad2 trace] → AccessRequest id=5 len=39
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    authenticator: de0f04abde127b093c5e456b9f51ed81
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    attributes:
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>      User-Name: [&#39;alice&#39;]
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>      NAS-IP-Address: [&#39;192.168.1.10&#39;]
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>      Service-Type: [&#39;Login-User&#39;]
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    raw:
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>        0000  01 05 00 27 de 0f 04 ab de 12 7b 09 3c 5e 45 6b  ...&#39;......{.&lt;^Ek
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>        0010  9f 51 ed 81 01 07 61 6c 69 63 65 04 06 c0 a8 01  .Q....alice.....
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>        0020  0a 06 06 00 00 00 01                             .......
 </span></code></pre></div>
 <div class="admonition danger">
 <p class="admonition-title">Why two env vars?</p>
@@ -1323,9 +1464,9 @@
 </div>
 <h2 id="4-load-a-dictionary">4. Load a dictionary</h2>
 <p>Before you can build packets, pyrad2 needs a dictionary to know what <code>User-Name</code> <em>means</em>. Dictionaries are plain text files with one definition per line:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>ATTRIBUTE User-Name      1  string
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>ATTRIBUTE User-Password  2  string
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>ATTRIBUTE CHAP-Password  3  octets
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>ATTRIBUTE User-Name      1  string
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>ATTRIBUTE User-Password  2  string
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>ATTRIBUTE CHAP-Password  3  octets
 </span></code></pre></div>
 <p>Two reference dictionaries are included in the repo:</p>
 <ul>
@@ -1333,9 +1474,9 @@
 <li><a href="https://github.com/pyradius/pyrad2/blob/master/examples/dictionary.freeradius"><code>examples/dictionary.freeradius</code></a> - FreeRADIUS vendor-specific attributes</li>
 </ul>
 <p>Drop one (or both) into your project, then load it:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.dictionary</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dictionary</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">d</span> <span class="o">=</span> <span class="n">Dictionary</span><span class="p">(</span><span class="s2">&quot;dictionary&quot;</span><span class="p">)</span>  <span class="c1"># path to a file, or any file-like object</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyrad2.dictionary</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dictionary</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">d</span> <span class="o">=</span> <span class="n">Dictionary</span><span class="p">(</span><span class="s2">&quot;dictionary&quot;</span><span class="p">)</span>  <span class="c1"># path to a file, or any file-like object</span>
 </span></code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Same dictionary on both sides</p>
