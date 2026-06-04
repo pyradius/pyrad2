@@ -260,18 +260,40 @@ class Client(host._ClientPacketFactoryMixin, _LegacyAttrMixin, host.Host):
         if isinstance(pkt, packet.StatusPacket):
             return self.send_status_packet(pkt)
         if isinstance(pkt, packet.AuthPacket):
-            if pkt.auth_type == "eap-md5":
-                eap.inject_eap_identity(pkt)
-            reply = self._send_packet(pkt, self.authport)
-            if (
-                reply
-                and reply.code == PacketType.AccessChallenge
-                and pkt.auth_type == "eap-md5"
-            ):
-                eap.apply_eap_md5_challenge(pkt, reply)
-                reply = self._send_packet(pkt, self.authport)
-            return reply
+            return self._send_auth_packet(pkt)
         elif isinstance(pkt, packet.CoAPacket):
             return self._send_packet(pkt, self.coaport)
         else:
             return self._send_packet(pkt, self.acctport)
+
+    def _send_auth_packet(self, pkt: packet.AuthPacket) -> packet.Packet:
+        """Send an Access-Request, driving an EAP exchange if registered.
+
+        When ``pkt.auth_type`` matches a method in the EAP registry the
+        loop calls ``method.start`` once before the first send and
+        ``method.respond`` after every ``Access-Challenge`` reply,
+        continuing until the server returns ``Access-Accept`` /
+        ``Access-Reject`` (or any non-Challenge code). For unregistered
+        or missing ``auth_type`` values the request flows through as a
+        single round-trip.
+
+        The sync transport does not regenerate the Request Authenticator
+        between rounds — ``Packet.request_packet`` only re-allocates one
+        when ``self.authenticator`` is ``None`` — so the same value
+        spans the full challenge sequence. This preserves the pre-3.1
+        EAP-MD5 behaviour exactly; methods that need fresh
+        authenticators per round (e.g. EAP-TLS over the sync client) can
+        set ``pkt.authenticator = None`` from inside ``respond``.
+        """
+        method = eap.get_method(pkt.auth_type)
+        if method is not None:
+            method.start(pkt)
+        reply = self._send_packet(pkt, self.authport)
+        while (
+            method is not None
+            and reply is not None
+            and reply.code == PacketType.AccessChallenge
+        ):
+            method.respond(pkt, reply)
+            reply = self._send_packet(pkt, self.authport)
+        return reply

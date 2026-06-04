@@ -531,71 +531,72 @@ class ClientAsync(_ClientPacketFactoryMixin, _LegacyAttrMixin):
         return ans
 
     def _send_auth_packet(self, pkt: AuthPacket) -> asyncio.Future:
-        """Send an Access-Request, handling the EAP-MD5 challenge round-trip."""
+        """Send an Access-Request, driving an EAP exchange if registered.
+
+        When ``pkt.auth_type`` matches a method in the EAP registry the
+        loop calls ``method.start`` once before the first send and
+        ``method.respond`` after every ``Access-Challenge`` reply,
+        continuing until the server returns ``Access-Accept`` /
+        ``Access-Reject``. Between rounds the packet's id and
+        authenticator are regenerated so the transport's per-id pending
+        map stays consistent.
+
+        Returns an ``asyncio.Future`` that resolves with the final
+        reply or rejects with whatever exception the transport / method
+        surfaced.
+        """
         assert self.protocol_auth is not None
-        # Capture the protocol locally so the nested callback can use it
+        # Capture the protocol locally so the nested callbacks use it
         # without re-asserting (mypy cannot prove self.protocol_auth is
-        # still non-None when the callback fires).
+        # still non-None when each callback fires).
         protocol = self.protocol_auth
 
-        if pkt.auth_type == "eap-md5":
-            eap.inject_eap_identity(pkt)
+        method = eap.get_method(pkt.auth_type)
+        if method is not None:
+            method.start(pkt)
 
         loop = asyncio.get_running_loop()
         outer: asyncio.Future = loop.create_future()
         self._prepare_outgoing_packet(pkt)
 
-        first: asyncio.Future = loop.create_future()
-        protocol.send_packet(pkt, first)
+        def _send_round() -> None:
+            """Queue ``pkt`` on the transport and route the reply back."""
+            fut: asyncio.Future = loop.create_future()
+            protocol.send_packet(pkt, fut)
+            fut.add_done_callback(_on_reply)
 
-        def _on_first_reply(fut: asyncio.Future) -> None:
+        def _on_reply(fut: asyncio.Future) -> None:
             if outer.done():
                 return
             if fut.cancelled():
                 outer.cancel()
                 return
-            first_exc = fut.exception()
-            if first_exc is not None:
-                outer.set_exception(first_exc)
+            exc = fut.exception()
+            if exc is not None:
+                outer.set_exception(exc)
                 return
 
             reply = fut.result()
             if (
-                pkt.auth_type == "eap-md5"
+                method is not None
                 and reply is not None
                 and reply.code == PacketType.AccessChallenge
             ):
                 try:
-                    eap.apply_eap_md5_challenge(pkt, reply)
+                    method.respond(pkt, reply)
                 except Exception as challenge_exc:  # noqa: BLE001
                     outer.set_exception(challenge_exc)
                     return
-
-                # The retry uses the same Packet object, so it needs a
-                # fresh id/authenticator before re-entering the transport.
+                # Each retry reuses the same Packet object, so it needs
+                # a fresh id/authenticator before re-entering the
+                # transport — the pending-request map is keyed by id.
                 pkt.id = protocol.create_id()
                 pkt.authenticator = pkt.create_authenticator()
                 self._prepare_outgoing_packet(pkt)
-
-                second: asyncio.Future = loop.create_future()
-                protocol.send_packet(pkt, second)
-
-                def _on_second_reply(fut2: asyncio.Future) -> None:
-                    if outer.done():
-                        return
-                    if fut2.cancelled():
-                        outer.cancel()
-                        return
-                    exc2 = fut2.exception()
-                    if exc2 is not None:
-                        outer.set_exception(exc2)
-                    else:
-                        outer.set_result(fut2.result())
-
-                second.add_done_callback(_on_second_reply)
+                _send_round()
                 return
 
             outer.set_result(reply)
 
-        first.add_done_callback(_on_first_reply)
+        _send_round()
         return outer

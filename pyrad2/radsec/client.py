@@ -406,18 +406,31 @@ class RadSecClient(_ClientPacketFactoryMixin):
             packet (Packet): The packet to send
         """
         if isinstance(packet, AuthPacket):
-            if packet.auth_type == "eap-md5":
-                eap.inject_eap_identity(packet)
-            reply = await self._send_packet(packet)
-            if (
-                reply
-                and reply.code == PacketType.AccessChallenge
-                and packet.auth_type == "eap-md5"
-            ):
-                eap.apply_eap_md5_challenge(packet, reply)
-                reply = await self._send_packet(packet)
-            return reply
+            return await self._send_auth_packet(packet)
         elif isinstance(packet, CoAPacket):
             return await self._send_packet(packet)
         else:
             return await self._send_packet(packet)
+
+    async def _send_auth_packet(self, packet: AuthPacket) -> Optional[Packet]:
+        """Send an Access-Request, driving an EAP exchange if registered.
+
+        Same generic challenge loop as the UDP clients: ``start`` once,
+        ``respond`` per ``Access-Challenge``, terminate on any non-Challenge
+        code. RadSec multiplexes every exchange over a single TLS
+        connection, so id/authenticator regeneration between rounds isn't
+        required for transport correctness — the request id is part of
+        the RADIUS payload, not the TLS framing.
+        """
+        method = eap.get_method(packet.auth_type)
+        if method is not None:
+            method.start(packet)
+        reply = await self._send_packet(packet)
+        while (
+            method is not None
+            and reply
+            and reply.code == PacketType.AccessChallenge
+        ):
+            method.respond(packet, reply)
+            reply = await self._send_packet(packet)
+        return reply

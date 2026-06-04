@@ -1,9 +1,19 @@
-"""EAP byte-packing helpers shared by sync and async RADIUS clients.
+"""EAP-MD5 (RFC 3748 §5.4) — byte-packing helpers and method binding.
 
-Currently covers the EAP-MD5 challenge/response flow defined in
-RFC 3748 §5.4. The helpers operate on raw ``bytes`` so they can be
-called from both the synchronous ``Client`` and the asyncio
-``ClientAsync`` without dragging packet objects through the helper.
+This module contains the byte-level helpers that historically lived in
+``pyrad2/eap.py`` plus the small ``Md5Method`` class that plugs them
+into the generic ``EapMethod`` challenge loop.
+
+The free helpers are kept as module-level functions for two reasons:
+
+- they have stable callers outside the package (tests, scripts, and
+  users that pre-date the registry), and
+- they are useful primitives even when wiring a custom non-registry
+  flow.
+
+``pyrad2.eap.__init__`` re-exports every public name here so the
+historical ``from pyrad2 import eap; eap.inject_eap_identity(...)``
+spelling continues to work.
 """
 
 __docformat__ = "epytext en"
@@ -13,6 +23,7 @@ import struct
 
 from pyrad2 import packet
 from pyrad2.constants import EAPPacketType, EAPType
+from pyrad2.eap.base import EapMethod
 from pyrad2.exceptions import PacketError
 
 # RFC 2865 attribute codes used by the EAP-MD5 flow.
@@ -94,3 +105,17 @@ def apply_eap_md5_challenge(pkt, reply) -> None:
     ]
     # Carry the server's State across the challenge round-trip.
     pkt[STATE_ATTR] = reply[STATE_ATTR]
+
+
+class Md5Method(EapMethod):
+    """EAP-MD5 challenge/response (RFC 3748 §5.4).
+
+    Stateless — the entire exchange is one round and every input lives
+    in the packet objects passed to ``start``/``respond``.
+    """
+
+    def start(self, pkt) -> None:
+        inject_eap_identity(pkt)
+
+    def respond(self, pkt, challenge) -> None:
+        apply_eap_md5_challenge(pkt, challenge)
