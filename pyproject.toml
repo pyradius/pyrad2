@@ -63,7 +63,7 @@ dev = [
     # tests/test_uvloop_compat.py pins uvloop compatibility so the
     # nominal ``isinstance(..., asyncio.DatagramTransport)`` check
     # can't sneak back in. uvloop has no Windows wheel.
-    "uvloop>=0.21 ; sys_platform != 'win32'",
+    "uvloop>=0.22.1 ; sys_platform != 'win32'",
 ]
 docs = [
     "mkdocs>=1.6.1",
