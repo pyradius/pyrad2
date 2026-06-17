@@ -45,9 +45,7 @@ def fresh_packet(dictionary: Dictionary) -> packet.Packet:
     )
 
 
-def encode_and_decode(
-    pkt: packet.Packet, dictionary: Dictionary
-) -> packet.Packet:
+def encode_and_decode(pkt: packet.Packet, dictionary: Dictionary) -> packet.Packet:
     """Encode ``pkt``'s attributes, then decode them into a fresh packet."""
     attrs = pkt._pkt_encode_attributes()
     header = struct.pack("!BBH", 1, 1, 20 + len(attrs)) + b"0123456789ABCDEF"
@@ -84,9 +82,7 @@ def demo_concat(dictionary: Dictionary) -> None:
         avp_count += 1
         offset += wire[offset + 1]
     logger.info("Original value is {} bytes", len(payload))
-    logger.info(
-        "Wire output is {} bytes split across {} AVPs", len(wire), avp_count
-    )
+    logger.info("Wire output is {} bytes split across {} AVPs", len(wire), avp_count)
 
     decoded = encode_and_decode(pkt, dictionary)
     logger.info(
@@ -157,9 +153,7 @@ def demo_evs(dictionary: Dictionary) -> None:
     pkt.add_attribute("Example-Bandwidth-Mbps", 1000)
 
     wire = pkt._pkt_encode_attributes()
-    logger.info(
-        "Two EVS AVPs encoded to {} bytes: {}", len(wire), wire.hex()
-    )
+    logger.info("Two EVS AVPs encoded to {} bytes: {}", len(wire), wire.hex())
 
     decoded = encode_and_decode(pkt, dictionary)
     logger.info("Example-User-Tier: {}", decoded["Example-User-Tier"])

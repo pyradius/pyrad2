@@ -66,9 +66,7 @@ def banner(text: str) -> None:
 def trace_hint() -> None:
     """Surface the PYRAD2_TRACE knob unless the user already turned it on."""
     if not os.environ.get("PYRAD2_TRACE"):
-        logger.info(
-            "tip: re-run with PYRAD2_TRACE=1 to see wire bytes + decoded AVPs"
-        )
+        logger.info("tip: re-run with PYRAD2_TRACE=1 to see wire bytes + decoded AVPs")
 
 
 def attribute_bytes(value: bytes | str) -> bytes:

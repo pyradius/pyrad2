@@ -99,7 +99,14 @@ class DemoEapMd5Server(ServerAsync):
         #   code(1) + id(1) + length(2) + type(1) + size(1) + challenge(N) + name?
         # We omit Name; the demo doesn't carry an EAP server name.
         eap_payload = (
-            struct.pack("!BBHBB", 1, new_eap_id, 6 + len(challenge), EAP_TYPE_MD5, len(challenge))
+            struct.pack(
+                "!BBHBB",
+                1,
+                new_eap_id,
+                6 + len(challenge),
+                EAP_TYPE_MD5,
+                len(challenge),
+            )
             + challenge
         )
         reply = self.create_reply_packet(pkt)

@@ -77,8 +77,7 @@ class DemoEapGtcServer(ServerAsync):
         # EAP-Request/GTC: code(1) + id(1) + length(2) + type(1) + prompt
         prompt = b"Password: "
         eap_payload = (
-            struct.pack("!BBHB", 1, new_eap_id, 5 + len(prompt), EAP_TYPE_GTC)
-            + prompt
+            struct.pack("!BBHB", 1, new_eap_id, 5 + len(prompt), EAP_TYPE_GTC) + prompt
         )
         logger.info(
             "[server] EAP-Identity from {} → issuing GTC prompt id={}",

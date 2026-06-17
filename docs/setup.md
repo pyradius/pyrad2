@@ -45,6 +45,15 @@ with the base install.
 See [Authentication Methods](auth.md) for the full method matrix and
 client snippets.
 
+### Async runtime: asyncio and uvloop
+
+`ServerAsync` and `ClientAsync` work on any event loop that implements
+the asyncio transport protocols. In practice that means both **vanilla
+asyncio** and **[uvloop](https://github.com/MagicStack/uvloop)** are supported.
+Embedding pyrad2 inside a [FastAPI](https://fastapi.tiangolo.com/) /
+[Uvicorn](https://www.uvicorn.org/) host (which defaults to uvloop on
+Linux/macOS) needs no special setup.
+
 ## 2. RADIUS in one minute
 
 If you've never worked with RADIUS, here's what you need to know before reading another line.

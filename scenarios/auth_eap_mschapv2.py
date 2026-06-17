@@ -251,7 +251,9 @@ async def main() -> None:
 
     try:
         banner("Sending EAP-MSCHAPv2 Access-Request")
-        req = client.create_auth_packet(User_Name=DEMO_USER, User_Password=DEMO_PASSWORD)
+        req = client.create_auth_packet(
+            User_Name=DEMO_USER, User_Password=DEMO_PASSWORD
+        )
         req["NAS-IP-Address"] = "192.168.1.10"
         req.auth_type = "eap-mschapv2"
         logger.info("[client] → Access-Request id={} (EAP-MSCHAPv2)", req.id)

@@ -3,7 +3,7 @@ __docformat__ = "epytext en"
 import asyncio
 import random
 from datetime import datetime
-from typing import Optional
+from typing import Optional, cast
 
 from loguru import logger
 
@@ -137,10 +137,16 @@ class DatagramProtocolClient(_LegacyAttrMixin, asyncio.Protocol):
         self.transport.sendto(packet.request_packet())
 
     def connection_made(self, transport: asyncio.BaseTransport):
-        assert isinstance(transport, asyncio.DatagramTransport), (
-            "Expected DatagramTransport"
+        # Duck-typed instead of ``isinstance(transport, asyncio.DatagramTransport)``
+        # so the client works under non-asyncio loops (uvloop's UDPTransport
+        # implements the protocol structurally but is not a subclass).
+        if not hasattr(transport, "sendto"):
+            raise TypeError(
+                f"Expected a DatagramTransport-like object, got {type(transport).__name__}"
+            )
+        self.transport: asyncio.DatagramTransport = cast(
+            asyncio.DatagramTransport, transport
         )
-        self.transport: asyncio.DatagramTransport = transport
 
         socket = transport.get_extra_info("socket")
         logger.info(
@@ -385,13 +391,7 @@ class ClientAsync(_ClientPacketFactoryMixin, _LegacyAttrMixin):
             )
             task_list.append(coa_connect)
 
-        await asyncio.ensure_future(
-            asyncio.gather(
-                *task_list,
-                return_exceptions=False,
-            ),
-            loop=loop,
-        )
+        await asyncio.gather(*task_list, return_exceptions=False)
 
     async def deinitialize_transports(
         self,

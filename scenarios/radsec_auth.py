@@ -65,8 +65,8 @@ class DemoRadSecServer(BaseRadSecServer):
 
 async def _wait_for_listening(host: str, port: int, timeout: float = 2.0) -> None:
     """Poll the TCP socket until the server's TLS listener is accepting."""
-    deadline = asyncio.get_event_loop().time() + timeout
-    while asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
         try:
             _, writer = await asyncio.open_connection(host, port)
             writer.close()
