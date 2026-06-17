@@ -305,6 +305,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#async-runtime-asyncio-and-uvloop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Async runtime: asyncio and uvloop
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1335,6 +1346,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#async-runtime-asyncio-and-uvloop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Async runtime: asyncio and uvloop
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1440,6 +1462,13 @@ authentication method pyrad2 ships (PAP, CHAP, EAP-MD5, EAP-GTC) works
 with the base install.</p>
 <p>See <a href="../auth/">Authentication Methods</a> for the full method matrix and
 client snippets.</p>
+<h3 id="async-runtime-asyncio-and-uvloop">Async runtime: asyncio and uvloop</h3>
+<p><code>ServerAsync</code> and <code>ClientAsync</code> work on any event loop that implements
+the asyncio transport protocols. In practice that means both <strong>vanilla
+asyncio</strong> and <strong><a href="https://github.com/MagicStack/uvloop">uvloop</a></strong> are supported.
+Embedding pyrad2 inside a <a href="https://fastapi.tiangolo.com/">FastAPI</a> /
+<a href="https://www.uvicorn.org/">Uvicorn</a> host (which defaults to uvloop on
+Linux/macOS) needs no special setup.</p>
 <h2 id="2-radius-in-one-minute">2. RADIUS in one minute</h2>
 <p>If you've never worked with RADIUS, here's what you need to know before reading another line.</p>
 <ul>
