@@ -15,6 +15,7 @@ def format_attribute_values(values):
     """Return RADIUS attribute values in a readable form for the example."""
     return [value.hex() if isinstance(value, bytes) else value for value in values]
 
+
 srv = Client(
     server="127.0.0.1",
     authport=1812,

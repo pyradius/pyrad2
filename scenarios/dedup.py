@@ -143,9 +143,7 @@ async def main() -> None:
 
         banner("Fresh request (different authenticator) — handler must run again")
         fresh = _build_access_request(dictionary)
-        await _send_and_recv(
-            transport, collector, fresh, label="Access-Request (new)"
-        )
+        await _send_and_recv(transport, collector, fresh, label="Access-Request (new)")
         logger.info(
             "[client] handler invocations after fresh request: {}",
             server.handler_calls,

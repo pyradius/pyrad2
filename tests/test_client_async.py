@@ -57,7 +57,7 @@ def _make_protocol(retries=2, timeout=0.05) -> DatagramProtocolClient:
 
 def _make_request(proto: DatagramProtocolClient, *, packet_id=42, send_date=None):
     """Submit a synthetic pending request without touching the transport."""
-    fut: asyncio.Future = asyncio.get_event_loop().create_future()
+    fut: asyncio.Future = asyncio.get_running_loop().create_future()
     pkt = MagicMock()
     pkt.id = packet_id
     pkt.request_packet.return_value = b"raw-bytes"
@@ -213,7 +213,7 @@ class TestDatagramReceived:
             pkt.secret = b""
             pkt.verify_reply.return_value = False
 
-            fut: asyncio.Future = asyncio.get_event_loop().create_future()
+            fut: asyncio.Future = asyncio.get_running_loop().create_future()
             proto.pending_requests[7] = {
                 "packet": pkt,
                 "creation_date": datetime.now(),
@@ -246,7 +246,7 @@ class TestDatagramReceived:
             pkt.secret = b""
             pkt.verify_reply.return_value = True
 
-            fut: asyncio.Future = asyncio.get_event_loop().create_future()
+            fut: asyncio.Future = asyncio.get_running_loop().create_future()
             proto.pending_requests[9] = {
                 "packet": pkt,
                 "creation_date": datetime.now(),

@@ -80,9 +80,7 @@ async def main() -> None:
         reply = await asyncio.wait_for(client.send_packet(req), timeout=2)
 
         banner("Reply received")
-        verdict = (
-            "CoA-ACK" if reply.code == PacketType.CoAACK else f"code={reply.code}"
-        )
+        verdict = "CoA-ACK" if reply.code == PacketType.CoAACK else f"code={reply.code}"
         logger.info("[client] ← {} id={}", verdict, reply.id)
     finally:
         await client.deinitialize_transports()
